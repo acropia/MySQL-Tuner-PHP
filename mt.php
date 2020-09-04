@@ -5,11 +5,14 @@ $preferredQueryTime = 5;
 function human_readable($number) {
     if ($number >= 1024 * 1024 * 1024) {
         return round($number / (1024 * 1024 * 1024), 2) . " G";
-    } elseif ($number >= 1024 * 1024) {
+    }
+    elseif ($number >= 1024 * 1024) {
         return round($number / (1024 * 1024), 2) . " M";
-    } elseif ($number >= 1024) {
+    }
+    elseif ($number >= 1024) {
         return round($number / (1024), 2) . " K";
-    } else {
+    }
+    else {
         return $number . " bytes";
     }
 }
@@ -25,14 +28,13 @@ $charset = 'utf8mb4';
 
 $dsn = "mysql:host=$host;charset=$charset";
 $options = [
-    PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-    PDO::ATTR_EMULATE_PREPARES   => false,
+    PDO::ATTR_EMULATE_PREPARES => false,
 ];
 try {
     $pdo = new PDO($dsn, $user, $pass, $options);
-}
-catch (\PDOException $e) {
+} catch (\PDOException $e) {
     throw new \PDOException($e->getMessage(), (int)$e->getCode());
 }
 
@@ -57,7 +59,6 @@ while ($row = $stmt->fetch()) {
 }
 
 
-
 $questions = $globalStatus['Questions'];
 $uptime = $globalStatus['Uptime'];
 $avgQps = $questions / $uptime;
@@ -66,8 +67,8 @@ $threadsConnected = $globalStatus['Threads_connected'];
 /* Slow queries */
 $slowQueries = $globalStatus['Slow_queries'];
 $longQueryTime = $globalVariables['long_query_time'];
-$logSlowQueries = $globalVariables['log_slow_queries'];
 $slowQueryLog = $globalVariables['slow_query_log'];
+$slowQueryLogFile = $globalVariables['slow_query_log_file'];
 
 /* Binary log */
 $logBin = $globalVariables['log_bin'];
@@ -140,12 +141,14 @@ $maxUsedConnections = $globalStatus['Max_used_connections'];
 
 if ($logBin = "ON") {
     $binlogCacheSize = $globalVariables['binlog_cache_size'];
-} else {
+}
+else {
     $binlogCacheSize = 0;
 }
 if ($maxHeapTableSize < $tmpTableSize) {
     $effectiveTmpTableSize = $maxHeapTableSize;
-} else {
+}
+else {
     $effectiveTmpTableSize = $tmpTableSize;
 }
 
@@ -186,11 +189,13 @@ $versionCompileMachine = $globalVariables['version_compile_machine'];
 if ($keyReads == 0) {
     $keyCacheMissRate = 0;
     $keyBufferFree = $keyBlocksUnused * $keyCacheBlockSize / $keyBufferSize * 100;
-} else {
+}
+else {
     $keyCacheMissRate = $keyReadRequests / $keyReads;
     if (!empty($keyBlocksUnused)) {
         $keyBufferFree = $keyBlocksUnused * $keyCacheBlockSize / $keyBufferSize * 100;
-    } else {
+    }
+    else {
         $keyBufferFree = "Unknown";
     }
 }
@@ -219,7 +224,63 @@ $totalSorts = $sortScan + $sortRange;
 $selectFullJoin = $globalStatus['Select_full_join'];
 $selectRangeCheck = $globalStatus['Select_range_check'];
 $joinBufferSize = $globalVariables['join_buffer_size'];
+$raiseJoinBuffer = ($selectFullJoin > 0 || $selectRangeCheck > 0);
 
+/* Open files limit */
+$openFilesLimit = $globalVariables['open_files_limit'];
+$openFiles = $globalStatus['Open_files'];
+$openFilesRatio = $openFiles * 100 / $openFilesLimit;
+
+/* Table cache */
+$dataDir = $globalVariables['datadir'];
+$tableCache = $globalVariables['table_cache'];
+$tableOpenCache = $globalVariables['table_open_cache'];
+$tableDefinitionCache = $globalVariables['table_definition_cache'];
+$openTables = $globalStatus['Open_tables'];
+$openedTables = $globalStatus['Opened_tables'];
+$openTableDefinitions = $globalStatus['Open_table_definitions'];
+
+if ($tableOpenCache) $tableCache = $tableOpenCache;
+
+$tableCount = 0;
+$stmt = $pdo->query("SELECT COUNT(*) AS table_count FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE'");
+$tableCount = $stmt->fetch()['table_count'];
+
+if ($openedTables != 0 && $tableCache != 0) {
+    $tableCacheHitRate = $openTables * 100 / $openedTables;
+    $tableCacheFill = $openTables * 100 / $tableCache;
+}
+elseif ($openedTables == 0 && $tableCache != 0) {
+    $tableCacheHitRate = 100;
+    $tableCacheFill = $openTables * 100 / $tableCache;
+}
+else {
+    $tableCacheError = true;
+}
+
+/* Temp tables */
+$createdTmpTables = $globalStatus['Created_tmp_tables'];
+$createdTmpDiskTables = $globalStatus['Created_tmp_disk_tables'];
+$tmpTableSize = $globalVariables['tmp_table_size'];
+$maxHeapTableSize = $globalVariables['max_heap_table_size'];
+$tmpDiskTables = ($createdTmpTables == 0) ? 0 : $createdTmpDiskTables * 100 / ($createdTmpTables + $createdTmpDiskTables);
+
+/* Table scans */
+$comSelect = $globalStatus['Com_select'];
+$handlerReadRndNext = $globalStatus['Handler_read_rnd_next'];
+$readBufferSize = $globalVariables['read_buffer_size'];
+
+if ($comSelect > 0) {
+    $fullTableScans = $handlerReadRndNext / $comSelect;
+}
+
+/* Table locking */
+$tableLocksWaited = $globalStatus['Table_locks_waited'];
+$tableLocksImmediate = $globalStatus['Table_locks_immediate'];
+$concurrentInsert = $globalVariables['concurrent_insert'];
+$lowPriorityUpdates = $globalVariables['low_priority_updates'];
+
+$immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tableLocksWaited : 99999;
 ?>
 <!doctype html>
 <html lang="en">
@@ -293,7 +354,7 @@ $joinBufferSize = $globalVariables['join_buffer_size'];
     </div>
     <div class='row'>
         <?php
-        if ($globalStatus['Uptime'] < 172800) {
+        if ($uptime < 172800) {
             ?>
             <div class="alert alert-danger" role="alert">
                 Server has not been running for at least 48hrs. It may not be safe to use these recommendations!
@@ -303,49 +364,54 @@ $joinBufferSize = $globalVariables['join_buffer_size'];
         ?>
     </div>
     <div class='row'>
-        <div class='card'>
-            <div class='card-header'>
-                Slow queries
-            </div>
-            <div class='card-body'>
-                <?php
-                if ($logSlowQueries == "ON") {
-                    ?>
-                    <div class="alert alert-success" role="alert">
-                        Slow query log is enabled!
-                    </div>
+        <div class='col-sm-12'>
+            <div class='card'>
+                <div class='card-header'>Slow queries</div>
+                <div class='card-body'>
+                    <p>The slow query log is a record of SQL queries that took a long time to perform. Note that, if
+                        your queries contain user's passwords, the slow query log may contain passwords too. Thus, it
+                        should be protected.</p>
                     <?php
-                }
-                elseif ($logSlowQueries == "OFF" or empty($logSlowQueries)) {
+                    if ($slowQueryLog == "ON") {
+                        ?>
+                        <div class="alert alert-success" role="alert">
+                            Slow query log is enabled!
+                        </div>
+                        <?php
+                    }
+                    elseif ($slowQueryLog == "OFF" or empty($logSlowQueries)) {
+                        ?>
+                        <div class="alert alert-danger" role="alert">
+                            Slow query log is not enabled!
+                        </div>
+                        <?php
+                    }
                     ?>
-                    <div class="alert alert-danger" role="alert">
-                        Slow query log is not enabled!
-                    </div>
-                <?php
-                }
-                ?>
-                <p>Long query time: <?= $longQueryTime ?></p>
-                <p>Log slow queries: <?= $logSlowQueries ?></p>
-                <p>Slow query log: <?= $slowQueryLog ?></p>
-                <p>Since startup, <?= $slowQueries ?> out of <?= $questions ?> have taken longer than <?= $longQueryTime ?> sec. to complete.</p>
+                    <p>Long query time: <?= $longQueryTime ?></p>
+                    <p>Slow query log: <?= $slowQueryLog ?></p>
+                    <p>Slow query log file: <?= $slowQueryLogFile ?></p>
+                    <p>Since startup, <?= $slowQueries ?> out of <?= $questions ?> have taken longer
+                        than <?= $longQueryTime ?> sec. to complete.</p>
 
-                <?php
-                if ($longQueryTime > $preferredQueryTime) {
-                    ?>
-                    <div class="alert alert-warning" role="alert">
-                        Your long_query_time may be too high, I typically set this under <?= $preferredQueryTime ?> sec.
-                    </div>
                     <?php
-                }
-                elseif (round($longQueryTime) == 0) {
+                    if ($longQueryTime > $preferredQueryTime) {
+                        ?>
+                        <div class="alert alert-warning" role="alert">
+                            Your long_query_time may be too high, I typically set this under <?= $preferredQueryTime ?>
+                            sec.
+                        </div>
+                        <?php
+                    }
+                    elseif (round($longQueryTime) == 0) {
+                        ?>
+                        <div class="alert alert-warning" role="alert">
+                            Your long_query_time ios set to zero, which will cause ALL queries to be logged!<br>
+                            If you actually want to log all queries, use the query log, not the slow query log.
+                        </div>
+                        <?php
+                    }
                     ?>
-                    <div class="alert alert-warning" role="alert">
-                        Your long_query_time ios set to zero, which will cause ALL queries to be logged!<br>
-                        If you actually want to log all queries, use the query log, not the slow query log.
-                    </div>
-                    <?php
-                }
-                ?>
+                </div>
             </div>
         </div>
     </div>
@@ -355,6 +421,7 @@ $joinBufferSize = $globalVariables['join_buffer_size'];
                 Binary log
             </div>
             <div class='card-body'>
+                
                 <?php
                 if ($logBin == "ON") {
                     ?>
@@ -427,7 +494,8 @@ $joinBufferSize = $globalVariables['join_buffer_size'];
                 elseif ($connectionsRatio < 10) {
                     ?>
                     <div class="alert alert-danger" role="alert">
-                        You are using less than 10% of your configured max_connections. Lowering max_connections could help to avoid an over-allocation of memory.
+                        You are using less than 10% of your configured max_connections. Lowering max_connections could
+                        help to avoid an over-allocation of memory.
                     </div>
                     <?php
                 }
@@ -474,7 +542,7 @@ $joinBufferSize = $globalVariables['join_buffer_size'];
                     <p>InnoDB row lock waits: <?= $innodbRowLockWaits ?></p>
                     <p>InnoDB index space: <?= human_readable($innodbIndexLength) ?></p>
                     <p>InnoDB data space: <?= human_readable($innodbDataLength) ?></p>
-                    <p>InnoDB buffer pool free pct.: <?= round($innodbBufferPoolFreePct,1) ?> %</p>
+                    <p>InnoDB buffer pool free pct.: <?= round($innodbBufferPoolFreePct, 1) ?> %</p>
                     <?php
                 }
                 ?>
@@ -548,7 +616,7 @@ $joinBufferSize = $globalVariables['join_buffer_size'];
                 if ($keyReads == 0) {
                     ?>
                     <div class="alert alert-danger" role="alert">
-                       No key reads?! Seriously look into using some indexes
+                        No key reads?! Seriously look into using some indexes
                     </div>
                     <?php
                 }
@@ -648,6 +716,233 @@ $joinBufferSize = $globalVariables['join_buffer_size'];
                         Your joins seem to be using indexes properly
                     </div>
                     <?php
+                }
+                if ($selectFullJoin > 0 || $selectRangeCheck > 0) {
+                    ?>
+                    <div class="alert alert-danger" role="alert">
+                        You should enable "log-queries-not-using-indexes" and look for non indexed joins in the slow
+                        query log.
+                    </div>
+                    <?php
+                    if ($raiseJoinBuffer) {
+                        ?>
+                        <div class="alert alert-info" role="alert">
+                            If you are unable to optimize your queries you may want to increase your join_buffer_size to
+                            accomodate larger joins in one pass.
+                        </div>
+                        <?php
+                    }
+                }
+                if ($joinBufferSize >= 4 * 1024 * 1024) {
+                    ?>
+                    <div class="alert alert-danger" role="alert">
+                        It is not advised to have more than 4 M join_buffer_size.
+                    </div>
+                    <?php
+                }
+                ?>
+            </div>
+        </div>
+    </div>
+    <div class='row'>
+        <div class='card'>
+            <div class='card-header'>
+                Open files limit
+            </div>
+            <div class='card-body'>
+                <p>Open files limit: <?= $openFilesLimit ?></p>
+                <p>Open files: <?= $openFiles ?></p>
+                <p>Open files ratio: <?= $openFilesRatio ?></p>
+                <?php
+                if ($openFilesRatio >= 75) {
+                    ?>
+                    <div class="alert alert-danger" role="alert">
+                        You currently have open more than 75% of your open_file_limit.
+                    </div>
+                    <?php
+                }
+                else {
+                    ?>
+                    <div class="alert alert-success" role="alert">
+                        Your open_files_limit value seems to be fine.
+                    </div>
+                    <?php
+
+                }
+                ?>
+            </div>
+        </div>
+    </div>
+    <div class='row'>
+        <div class='card'>
+            <div class='card-header'>
+                Table cache
+            </div>
+            <div class='card-body'>
+                <p>Datadir: <?= $dataDir ?></p>
+                <p>Table cache: <?= $tableCache ?></p>
+                <p>Table open cache: <?= $tableOpenCache ?></p>
+                <p>Table definition cache: <?= $tableDefinitionCache ?></p>
+                <p>Open tables: <?= $openTables ?></p>
+                <p>Opened tables: <?= $openedTables ?></p>
+                <p>Open table definitions: <?= $openTableDefinitions ?></p>
+                <p>Table count: <?= $tableCount ?></p>
+                <p>Table cache hit rate: <?= $tableCacheHitRate ?></p>
+                <p>Table cache fill: <?= $tableCacheFill ?></p>
+                <?php
+                if ($tableCacheError) {
+                    ?>
+                    <div class="alert alert-danger" role="alert">
+                        No table cache?!
+                    </div>
+                    <?php
+                }
+
+                if ($tableCacheFill < 95) {
+                    ?>
+                    <div class="alert alert-success" role="alert">
+                        Your table_cache value seems to be fine
+                    </div>
+                    <?php
+                }
+                elseif ($tableCacheHitRate <= 85 || $tableCacheFill >= 95) {
+                    ?>
+                    <div class="alert alert-danger" role="alert">
+                        You should probably increase your table_cache
+                    </div>
+                    <?php
+                }
+                else {
+                    ?>
+                    <div class="alert alert-success" role="alert">
+                        Your table_cache value seems to be fine.
+                    </div>
+                    <?php
+                }
+                ?>
+            </div>
+        </div>
+    </div>
+    <div class='row'>
+        <div class='card'>
+            <div class='card-header'>
+                Temp tables
+            </div>
+            <div class='card-body'>
+                <p>Created tmp tables: <?= $createdTmpTables ?></p>
+                <p>Created tmp disk tables: <?= $createdTmpDiskTables ?></p>
+                <p>Tmp table size: <?= human_readable($tmpTableSize) ?></p>
+                <p>Max heap table size: <?= human_readable($maxHeapTableSize) ?></p>
+                <p>Tmp disk tables: <?= round($tmpDiskTables, 1) ?></p>
+                <?php
+                if ($tmpTableSize > $maxHeapTableSize) {
+                    ?>
+                    <div class="alert alert-warning" role="alert">
+                        Effective in-memory tmp_table_size is limited to max_heap_table_size.
+                    </div>
+                    <?php
+                }
+
+                if ($tmpDiskTables >= 25) {
+                    ?>
+                    <div class="alert alert-danger" role="alert">
+                        Perhaps you should increase your tmp_table_size and/or max_heap_table_size to reduce the number
+                        of disk-based temperary tables.<br>
+                        Note! BLOB and TEXT colums are now allowed in memory tables. If you are using there columns
+                        raising these values might not impact your ratio of on disk temp tables.
+                    </div>
+                    <?php
+                }
+                else {
+                    ?>
+                    <div class="alert alert-success" role="alert">
+                        Your temporary tables ratio to be fine.
+                    </div>
+                    <?php
+                }
+                ?>
+            </div>
+        </div>
+    </div>
+    <div class='row'>
+        <div class='card'>
+            <div class='card-header'>
+                Table scans
+            </div>
+            <div class='card-body'>
+                <p>Com select: <?= $comSelect ?></p>
+                <p>Handler read rnd next: <?= $handlerReadRndNext ?></p>
+                <p>Read buffer size: <?= human_readable($readBufferSize) ?></p>
+                <?php
+                if ($comSelect > 0) {
+                    ?>
+                    <p>Full table scans ratio: <?= $fullTableScans ?> : 1</p>
+                    <?php
+
+                    if ($fullTableScans >= 4000 && $readBufferSize < 2 * 1024 * 1024) {
+                        ?>
+                        <div class="alert alert-danger" role="alert">
+                            You have a high ratio of sequential access requests to SELECTs. You may benefit from raising
+                            read_buffer_size and/or improving your use of indexes.
+                        </div>
+                        <?php
+                    }
+                    elseif ($readBufferSize > 8 * 1024 * 1024) {
+                        ?>
+                        <div class="alert alert-danger" role="alert">
+                            Read buffer is over 8 MB. There is probably no need for such a large read_buffer.
+                        </div>
+                        <?php
+                    }
+                    else {
+                        ?>
+                        <div class="alert alert-success" role="alert">
+                            Read buffer size seems to be fine.
+                        </div>
+                        <?php
+                    }
+                }
+                else {
+                    ?>
+                    <div class="alert alert-success" role="alert">
+                        Read buffer size seems to be fine.
+                    </div>
+                    <?php
+                }
+                ?>
+            </div>
+        </div>
+    </div>
+    <div class='row'>
+        <div class='card'>
+            <div class='card-header'>
+                Table locking
+            </div>
+            <div class='card-body'>
+                <p>Table locks waited: <?= $tableLocksWaited ?></p>
+                <p>Table locks immediate: <?= $tableLocksImmediate ?></p>
+                <p>Concurrent insert: <?= $concurrentInsert ?></p>
+                <p>Low priority updates: <?= $lowPriorityUpdates ?></p>
+                <?php
+                if ($tableLocksWaited > 0) {
+                    ?>
+                    <p>Lock / wait ratio: 1 : <?= round($immediateLocksMissRate) ?></p>
+                    <?php
+                }
+                if ($immediateLocksMissRate < 5000) {
+                    ?>
+                    <div class="alert alert-warning" role="alert">
+                        You may benefit from selective use of InnoDB
+                    </div>
+                    <?php
+                }
+                else {
+                    ?>
+                    <div class="alert alert-success" role="alert">
+                        Your table locking seems to be fine
+                    </div>
+                    <?php
+
                 }
                 ?>
             </div>
