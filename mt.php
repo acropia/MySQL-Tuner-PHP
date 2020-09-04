@@ -1,22 +1,21 @@
 <?php
-$physicalMemory = 1;
+$physicalMemory = 4 * 1024 * 1024 * 1024;
+$preferredQueryTime = 5;
+
 function human_readable($number) {
-    if ($number > 1024 * 1024 * 1024) {
+    if ($number >= 1024 * 1024 * 1024) {
         return round($number / (1024 * 1024 * 1024), 2) . " G";
-    }
-    elseif ($number > 1024 * 1024) {
+    } elseif ($number >= 1024 * 1024) {
         return round($number / (1024 * 1024), 2) . " M";
-    }
-    elseif ($number > 1024) {
+    } elseif ($number >= 1024) {
         return round($number / (1024), 2) . " K";
-    }
-    else {
+    } else {
         return $number . " bytes";
     }
 }
 
 function human_readable_time($seconds) {
-    return floor($seconds / 86400) . " days, " . ($seconds / 3600 % 24) . " hrs, ". ($seconds/60%60)." min";
+    return floor($seconds / 86400) . " days, " . ($seconds / 3600 % 24) . " hrs, " . ($seconds / 60 % 60) . " min";
 }
 
 $user = getenv("MTP_USER");
@@ -26,13 +25,14 @@ $charset = 'utf8mb4';
 
 $dsn = "mysql:host=$host;charset=$charset";
 $options = [
-    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+    PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-    PDO::ATTR_EMULATE_PREPARES => false,
+    PDO::ATTR_EMULATE_PREPARES   => false,
 ];
 try {
     $pdo = new PDO($dsn, $user, $pass, $options);
-} catch (\PDOException $e) {
+}
+catch (\PDOException $e) {
     throw new \PDOException($e->getMessage(), (int)$e->getCode());
 }
 
@@ -56,6 +56,49 @@ while ($row = $stmt->fetch()) {
     $globalVariables[$row['Variable_name']] = $row['Value'];
 }
 
+
+
+$questions = $globalStatus['Questions'];
+$uptime = $globalStatus['Uptime'];
+$avgQps = $questions / $uptime;
+$threadsConnected = $globalStatus['Threads_connected'];
+
+/* Slow queries */
+$slowQueries = $globalStatus['Slow_queries'];
+$longQueryTime = $globalVariables['long_query_time'];
+$logSlowQueries = $globalVariables['log_slow_queries'];
+$slowQueryLog = $globalVariables['slow_query_log'];
+
+/* Binary log */
+$logBin = $globalVariables['log_bin'];
+$maxBinlogSize = $globalVariables['max_binlog_size'];
+$expireLogsDays = $globalVariables['expire_logs_days'];
+$syncBinlog = $globalVariables['sync_binlog'];
+
+/* Threads */
+$threadsCreated = $globalStatus['Threads_created'];
+$threadsCached = $globalStatus['Threads_cached'];
+$threadsCacheSize = $globalVariables['thread_cache_size'];
+$historicThreadsPerSec = $threadsCreated / $uptime;
+
+/* Used connections */
+$maxConnections = $globalVariables['max_connections'];
+$maxUsedConnections = $globalStatus['Max_used_connections'];
+$threadsConnected = $globalStatus['Threads_connected'];
+$connectionsRatio = ($maxUsedConnections * 100 / $maxConnections);
+
+/* InnoDB */
+$innodbBufferPoolSize = $globalVariables['innodb_buffer_pool_size'];
+$innodbAdditionalMemPoolSize = $globalVariables['innodb_additional_mem_pool_size'];
+$innodbFastShutdown = $globalVariables['innodb_fast_shutdown'];
+$innodbFlushLogAtTrxCommit = $globalVariables['innodb_flush_log_at_trx_commit'];
+$innodbLocksUnsafeForBinlog = $globalVariables['innodb_locks_unsafe_for_binlog'];
+$innodbLogBufferSize = $globalVariables['innodb_log_buffer_size'];
+$innodbLogFileSize = $globalVariables['innodb_log_file_size'];
+$innodbLogFilesInGroup = $globalVariables['innodb_log_files_in_group'];
+$innodbSafeBinlog = $globalVariables['innodb_safe_binlog'];
+$innodbThreadConcurrency = $globalVariables['innodb_thread_concurrency'];
+
 /* InnoDB Index Length */
 $innodbIndexLength = 0;
 $stmt = $pdo->query("SELECT IFNULL(SUM(INDEX_LENGTH),0) AS index_length from information_schema.TABLES where ENGINE='InnoDB'");
@@ -67,157 +110,6 @@ $stmt = $pdo->query("SELECT IFNULL(SUM(DATA_LENGTH),0) AS data_length from infor
 $innodbDataLength = $stmt->fetch()['data_length'];
 
 
-$questions = $globalStatus['Questions'];
-$uptime = $globalStatus['Uptime'];
-$avgQps = $questions / $uptime;
-$threadsConnected = $globalStatus['Threads_connected'];
-?>
-<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css"
-          integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
-    <title>MySQL-Tuner-PHP</title>
-    <style>
-        .table-sm td {
-            font-size: .9em;
-            padding: 1px;
-        }
-    </style>
-</head>
-<body>
-<div class='container'>
-    <nav class="navbar navbar-light bg-light">
-        <a class="navbar-brand" href="#">MySQL-Tuner-PHP</a>
-    </nav>
-        <div class='row'>
-            <div class='col-sm'>
-               <table class='table table-sm'>
-                   <tr>
-                       <td>Host:</td>
-                       <td><?= $host ?></td>
-                   </tr>
-                   <tr>
-                       <td>User:</td>
-                       <td><?= $user ?></td>
-                   </tr>
-               </table>
-            </div>
-            <div class='col-sm'>
-                <table class='table table-sm'>
-                    <tr>
-                        <td>Server version:</td>
-                        <td><?= $version ?></td>
-                    </tr>
-                    <tr>
-                        <td>Major version:</td>
-                        <td><?= $majorVersion ?></td>
-                    </tr>
-                </table>
-            </div>
-            <div class='col-sm'>
-                <table class='table table-sm'>
-                    <tr>
-                        <td>Uptime:</td>
-                        <td><?= $uptime ?> seconds</td>
-                    </tr>
-                    <tr>
-                        <td>&nbsp;</td>
-                        <td><?= human_readable_time($uptime) ?></td>
-                    </tr>
-                    <tr>
-                        <td>Questions:</td>
-                        <td><?= $questions ?></td>
-                    </tr>
-                    <tr>
-                        <td>Avg. qps:</td>
-                        <td><?= round($avgQps,1) ?></td>
-                    </tr>
-                    <tr>
-                        <td>Threads connected:</td>
-                        <td><?= $threadsConnected ?></td>
-                    </tr>
-                </table>
-            </div>
-        </div>
-        <div class='row'>
-            <?php
-                if ($globalStatus['Uptime'] < 172800) {
-            ?>
-            <div class="alert alert-danger" role="alert">
-                Server has not been running for at least 48hrs. It may not be safe to use these recommendations!
-            </div>
-            <?php
-                }
-            ?>
-        </div>
-</div>
-<h1>Slow queries</h1>
-<p>Slow queries: <?php echo $globalStatus['Slow_queries']; ?></p>
-
-<h1>Binary log</h1>
-<p>Log bin: <?php echo $globalVariables['log_bin']; ?></p>
-
-<h1>Threads</h1>
-<p>Threads created: <?php echo $globalStatus['Threads_created']; ?></p>
-<p>Threads cached: <?php echo $globalStatus['Threads_cached']; ?></p>
-<p>Thread cache size: <?php echo $globalVariables['thread_cache_size']; ?></p>
-<?php
-$historicThreadsPerSec = $globalStatus['Threads_created'] / $globalStatus['Uptime'];
-?>
-<p>Historic threads per sec: <?php echo round($historicThreadsPerSec, 4); ?></p>
-
-<?php
-if ($historicThreadsPerSec > 2) {
-    echo "Warning";
-}
-else {
-    echo "Save";
-}
-?>
-
-<h1>Used connections</h1>
-<?php
-$maxConnections = $globalVariables['max_connections'];
-$maxUsedConnections = $globalStatus['Max_used_connections'];
-$threadsConnected = $globalStatus['Threads_connected'];
-
-$connectionsRatio = ($maxUsedConnections * 100 / $maxConnections);
-?>
-<p>Max connections: <?php echo $maxConnections; ?></p>
-<p>Threads connected: <?php echo $threadsConnected; ?></p>
-<p>Historic max used connections: <?php echo $maxUsedConnections; ?></p>
-<p>Connections ratio: <?php echo round($connectionsRatio, 1); ?></p>
-
-<?php
-if ($connectionsRatio > 85) {
-    echo "Warning: raise please";
-}
-elseif ($connectionsRatio < 10) {
-    echo "Warning: lower please";
-}
-else {
-    echo "Save";
-}
-?>
-
-<h1>InnoDB</h1>
-<?php
-$innodbBufferPoolSize = $globalVariables['innodb_buffer_pool_size'];
-$innodbAdditionalMemPoolSize = $globalVariables['innodb_additional_mem_pool_size'];
-$innodbFastShutdown = $globalVariables['innodb_fast_shutdown'];
-$innodbFlushLogAtTrxCommit = $globalVariables['innodb_flush_log_at_trx_commit'];
-$innodbLocksUnsafeForBinlog = $globalVariables['innodb_locks_unsafe_for_binlog'];
-$innodbLogBufferSize = $globalVariables['innodb_log_buffer_size'];
-$innodbLogFileSize = $globalVariables['innodb_log_file_size'];
-$innodbLogFilesInGroup = $globalVariables['innodb_log_files_in_group'];
-$innodbSafeBinlog = $globalVariables['innodb_safe_binlog'];
-$innodbThreadConcurrency = $globalVariables['innodb_thread_concurrency'];
-?>
-<p>InnoDB indexes: <?php echo $innodbIndexLength; ?></p>
-<?php
 if ($innodbIndexLength > 0) {
     $innodbBufferPoolPagesData = $globalStatus['Innodb_buffer_pool_pages_data'];
     $innodbBufferPoolPagesMisc = $globalStatus['Innodb_buffer_pool_pages_misc'];
@@ -232,19 +124,9 @@ if ($innodbIndexLength > 0) {
     $innodbRowLockWaits = $globalStatus['Innodb_row_lock_waits'];
 
     $innodbBufferPoolFreePct = $innodbBufferPoolPagesFree * 100 / $innodbBufferPoolPagesTotal;
-
-    ?>
-    <p>InnoDB buffer pool pages free: <?php echo $innodbBufferPoolPagesFree; ?></p>
-    <p>InnoDB index space: <?php echo human_readable($innodbIndexLength); ?></p>
-    <p>InnoDB data space: <?php echo human_readable($innodbDataLength); ?></p>
-    <p>InnoDB buffer pool free: <?php echo round($innodbBufferPoolFreePct, 1); ?> %</p>
-    <?php
 }
-?>
-<p>InnoDB buffer pool size: <?php echo human_readable($innodbBufferPoolSize); ?></p>
 
-<h1>Memory usage</h1>
-<?php
+/* Memory usage */
 $readBufferSize = $globalVariables['read_buffer_size'];
 $readRndBufferSize = $globalVariables['read_rnd_buffer_size'];
 $sortBufferSize = $globalVariables['sort_buffer_size'];
@@ -258,14 +140,12 @@ $maxUsedConnections = $globalStatus['Max_used_connections'];
 
 if ($logBin = "ON") {
     $binlogCacheSize = $globalVariables['binlog_cache_size'];
-}
-else {
+} else {
     $binlogCacheSize = 0;
 }
 if ($maxHeapTableSize < $tmpTableSize) {
     $effectiveTmpTableSize = $maxHeapTableSize;
-}
-else {
+} else {
     $effectiveTmpTableSize = $tmpTableSize;
 }
 
@@ -292,24 +172,8 @@ $maxMemory = $globalBuffers + $perThreadMaxBuffers;
 $totalMemory = $globalBuffers + $perThreadBuffers;
 
 $pctOfSysMem = $totalMemory * 100 / $physicalMemory;
-?>
-<p>Mem Memory Ever Allocated: <?php echo human_readable($maxMemory); ?></p>
-<p>Configured Max Per-thread Buffers: <?php echo human_readable($perThreadBuffers); ?></p>
-<p>Configured Max Global Buffers: <?php echo human_readable($globalBuffers); ?></p>
-<p>Configured Max Memory Limit: <?php echo human_readable($totalMemory); ?></p>
-<p>Physical Memory: <?php echo human_readable($physicalMemory); ?></p>
 
-<?php
-if ($pctOfSysMem > 90) {
-    echo "Warning";
-}
-else {
-    echo "Save";
-}
-?>
-
-<h1>Key buffer size</h1>
-<?php
+/* Key buffer size */
 $keyReadRequests = $globalStatus['Key_read_requests'];
 $keyReads = $globalStatus['Key_reads'];
 $keyBlocksUsed = $globalStatus['Key_blocks_used'];
@@ -320,24 +184,476 @@ $dataDir = $globalVariables['datadir'];
 $versionCompileMachine = $globalVariables['version_compile_machine'];
 
 if ($keyReads == 0) {
-    echo "Warning";
     $keyCacheMissRate = 0;
     $keyBufferFree = $keyBlocksUnused * $keyCacheBlockSize / $keyBufferSize * 100;
-}
-else {
+} else {
     $keyCacheMissRate = $keyReadRequests / $keyReads;
-    if (!$keyBlocksUnused) {
+    if (!empty($keyBlocksUnused)) {
         $keyBufferFree = $keyBlocksUnused * $keyCacheBlockSize / $keyBufferSize * 100;
-    }
-    else {
+    } else {
         $keyBufferFree = "Unknown";
     }
 }
-?>
-<p>Current key buffer size: <?php echo human_readable($keyBufferSize); ?></p>
-<p>Key cache miss rate is 1 : <?php echo $keyCacheMissRate; ?></p>
-<p>Key buffer free ratio: <?php echo $keyBufferFree; ?></p>
 
+/* Query cache */
+$queryCacheSize = $globalVariables['query_cache_size'];
+$queryCacheLimit = $globalVariables['query_cache_limit'];
+$queryCacheMinResUnit = $globalVariables['query_cache_min_res_unit'];
+$qcacheFreeMemory = $globalStatus['Qcache_free_memory'];
+$qcacheTotalBlocks = $globalStatus['Qcache_total_blocks'];
+$qcacheFreeBlocks = $globalStatus['Qcache_free_blocks'];
+$qcacheLowmemPrunes = $globalStatus['Qcache_lowmem_prunes'];
+
+$qcacheUsedMemory = $queryCacheSize - $qcacheFreeMemory;
+$qcacheMemFillRatio = $qcacheUsedMemory * 100 / $queryCacheSize;
+
+/* Sort operations */
+$sortMergePasses = $globalStatus['Sort_merge_passes'];
+$sortScan = $globalStatus['Sort_scan'];
+$sortRange = $globalStatus['Sort_range'];
+$sortBufferSize = $globalVariables['sort_buffer_size'];
+$readRndBufferSize = $globalVariables['read_rnd_buffer_size'];
+$totalSorts = $sortScan + $sortRange;
+
+/* Joins */
+$selectFullJoin = $globalStatus['Select_full_join'];
+$selectRangeCheck = $globalStatus['Select_range_check'];
+$joinBufferSize = $globalVariables['join_buffer_size'];
+
+?>
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css"
+          integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
+    <title>MySQL-Tuner-PHP</title>
+    <style>
+        .table-sm td {
+            font-size: .9em;
+            padding: 1px;
+        }
+    </style>
+</head>
+<body>
+<div class='container'>
+    <nav class="navbar navbar-light bg-light">
+        <a class="navbar-brand" href="#">MySQL-Tuner-PHP</a>
+    </nav>
+    <div class='row'>
+        <div class='col-sm'>
+            <table class='table table-sm'>
+                <tr>
+                    <td>Host:</td>
+                    <td><?= $host ?></td>
+                </tr>
+                <tr>
+                    <td>User:</td>
+                    <td><?= $user ?></td>
+                </tr>
+            </table>
+        </div>
+        <div class='col-sm'>
+            <table class='table table-sm'>
+                <tr>
+                    <td>Server version:</td>
+                    <td><?= $version ?></td>
+                </tr>
+                <tr>
+                    <td>Major version:</td>
+                    <td><?= $majorVersion ?></td>
+                </tr>
+            </table>
+        </div>
+        <div class='col-sm'>
+            <table class='table table-sm'>
+                <tr>
+                    <td>Uptime:</td>
+                    <td><?= $uptime ?> seconds</td>
+                </tr>
+                <tr>
+                    <td>&nbsp;</td>
+                    <td><?= human_readable_time($uptime) ?></td>
+                </tr>
+                <tr>
+                    <td>Questions:</td>
+                    <td><?= $questions ?></td>
+                </tr>
+                <tr>
+                    <td>Avg. qps:</td>
+                    <td><?= round($avgQps, 1) ?></td>
+                </tr>
+                <tr>
+                    <td>Threads connected:</td>
+                    <td><?= $threadsConnected ?></td>
+                </tr>
+            </table>
+        </div>
+    </div>
+    <div class='row'>
+        <?php
+        if ($globalStatus['Uptime'] < 172800) {
+            ?>
+            <div class="alert alert-danger" role="alert">
+                Server has not been running for at least 48hrs. It may not be safe to use these recommendations!
+            </div>
+            <?php
+        }
+        ?>
+    </div>
+    <div class='row'>
+        <div class='card'>
+            <div class='card-header'>
+                Slow queries
+            </div>
+            <div class='card-body'>
+                <?php
+                if ($logSlowQueries == "ON") {
+                    ?>
+                    <div class="alert alert-success" role="alert">
+                        Slow query log is enabled!
+                    </div>
+                    <?php
+                }
+                elseif ($logSlowQueries == "OFF" or empty($logSlowQueries)) {
+                    ?>
+                    <div class="alert alert-danger" role="alert">
+                        Slow query log is not enabled!
+                    </div>
+                <?php
+                }
+                ?>
+                <p>Long query time: <?= $longQueryTime ?></p>
+                <p>Log slow queries: <?= $logSlowQueries ?></p>
+                <p>Slow query log: <?= $slowQueryLog ?></p>
+                <p>Since startup, <?= $slowQueries ?> out of <?= $questions ?> have taken longer than <?= $longQueryTime ?> sec. to complete.</p>
+
+                <?php
+                if ($longQueryTime > $preferredQueryTime) {
+                    ?>
+                    <div class="alert alert-warning" role="alert">
+                        Your long_query_time may be too high, I typically set this under <?= $preferredQueryTime ?> sec.
+                    </div>
+                    <?php
+                }
+                elseif (round($longQueryTime) == 0) {
+                    ?>
+                    <div class="alert alert-warning" role="alert">
+                        Your long_query_time ios set to zero, which will cause ALL queries to be logged!<br>
+                        If you actually want to log all queries, use the query log, not the slow query log.
+                    </div>
+                    <?php
+                }
+                ?>
+            </div>
+        </div>
+    </div>
+    <div class='row'>
+        <div class='card'>
+            <div class='card-header'>
+                Binary log
+            </div>
+            <div class='card-body'>
+                <?php
+                if ($logBin == "ON") {
+                    ?>
+                    <div class="alert alert-success" role="alert">
+                        The binary log is enabled!
+                    </div>
+                    <?php
+                }
+                else {
+                    ?>
+                    <div class="alert alert-danger" role="alert">
+                        The binary log is not enabled.
+                    </div>
+                    <?php
+                }
+                ?>
+                <p>Log bin: <?= $logBin ?></p>
+                <p>Max binlog size: <?= $maxBinlogSize ?></p>
+                <p>Expire logs days: <?= $expireLogsDays ?></p>
+                <p>Sync binlog: <?= $syncBinlog ?></p>
+            </div>
+        </div>
+    </div>
+    <div class='row'>
+        <div class='card'>
+            <div class='card-header'>
+                Threads
+            </div>
+            <div class='card-body'>
+                <p>Thread cache size: <?= $threadsCacheSize ?></p>
+                <p>Threads cached: <?= $threadsCached ?></p>
+                <p>Historic threads per sec: <?= round($historicThreadsPerSec, 4) ?></p>
+                <?php
+                if ($historicThreadsPerSec > 2 && $threadsCached < 1) {
+                    ?>
+                    <div class="alert alert-danger" role="alert">
+                        Threads created per/sec are overrunning threads cached
+                    </div>
+                    <?php
+                }
+                else {
+                    ?>
+                    <div class="alert alert-success" role="alert">
+                        Your thread_cache_size is fine
+                    </div>
+                    <?php
+                }
+                ?>
+            </div>
+        </div>
+    </div>
+    <div class='row'>
+        <div class='card'>
+            <div class='card-header'>
+                Used connections
+            </div>
+            <div class='card-body'>
+                <p>Max connections: <?= $maxConnections ?></p>
+                <p>Threads connected: <?= $threadsConnected ?></p>
+                <p>Historic max used connections: <?= $maxUsedConnections ?></p>
+                <p>Connections ratio: <?php echo round($connectionsRatio, 1); ?> %</p>
+                <?php
+                if ($connectionsRatio > 85) {
+                    ?>
+                    <div class="alert alert-danger" role="alert">
+                        You should raise max_connections
+                    </div>
+                    <?php
+                }
+                elseif ($connectionsRatio < 10) {
+                    ?>
+                    <div class="alert alert-danger" role="alert">
+                        You are using less than 10% of your configured max_connections. Lowering max_connections could help to avoid an over-allocation of memory.
+                    </div>
+                    <?php
+                }
+                else {
+                    ?>
+                    <div class="alert alert-success" role="alert">
+                        Your max_connections variable seems to be fine
+                    </div>
+                    <?php
+                }
+                ?>
+            </div>
+        </div>
+    </div>
+    <div class='row'>
+        <div class='card'>
+            <div class='card-header'>
+                InnoDB
+            </div>
+            <div class='card-body'>
+                <p>InnoDB buffer pool size: <?= human_readable($innodbBufferPoolSize) ?></p>
+                <p>InnoDB additional mem pool size: <?= $innodbAdditionalMemPoolSize ?></p>
+                <p>InnoDB fast shutdown: <?= $innodbFastShutdown ?></p>
+                <p>InnoDB flush log at trx commit: <?= $innodbFlushLogAtTrxCommit ?></p>
+                <p>InnoDB locks unsafe for binlog: <?= $innodbLocksUnsafeForBinlog ?></p>
+                <p>InnoDB log buffer size: <?= human_readable($innodbLogBufferSize) ?></p>
+                <p>InnoDB log file size: <?= human_readable($innodbLogFileSize) ?></p>
+                <p>InnoDB log files in group: <?= $innodbLogFilesInGroup ?></p>
+                <p>InnoDB safe binlog: <?= $innodbSafeBinlog ?></p>
+                <p>InnoDB thread concurrency: <?= $innodbThreadConcurrency ?></p>
+                <?php
+                if (!empty($innodbIndexLength)) {
+                    ?>
+                    <p>InnoDB buffer pool pages data: <?= $innodbBufferPoolPagesData ?></p>
+                    <p>InnoDB buffer pool pages misc: <?= $innodbBufferPoolPagesMisc ?></p>
+                    <p>InnoDB buffer pool pages free: <?= $innodbBufferPoolPagesFree ?></p>
+                    <p>InnoDB buffer pool pages total: <?= $innodbBufferPoolPagesTotal ?></p>
+                    <p>InnoDB buffer pool read ahead seq: <?= $innodbBufferPoolReadAheadSeq ?></p>
+                    <p>InnoDB buffer pool read requests: <?= $innodbBufferPoolReadRequests ?></p>
+                    <p>InnoDB os log pending fsyncs: <?= $innodbOsLogPendingFsyncs ?></p>
+                    <p>InnoDB os log pending writes: <?= $innodbOsLogPendingWrites ?></p>
+                    <p>InnoDB log waits: <?= $innodbLogWaits ?></p>
+                    <p>InnoDB row lock time: <?= $innodbRowLockTime ?></p>
+                    <p>InnoDB row lock waits: <?= $innodbRowLockWaits ?></p>
+                    <p>InnoDB index space: <?= human_readable($innodbIndexLength) ?></p>
+                    <p>InnoDB data space: <?= human_readable($innodbDataLength) ?></p>
+                    <p>InnoDB buffer pool free pct.: <?= round($innodbBufferPoolFreePct,1) ?> %</p>
+                    <?php
+                }
+                ?>
+            </div>
+        </div>
+    </div>
+    <div class='row'>
+        <div class='card'>
+            <div class='card-header'>
+                Memory usage
+            </div>
+            <div class='card-body'>
+                <p>Read buffer size: <?= $readBufferSize ?></p>
+                <p>Read rnd buffer size: <?= $readRndBufferSize ?></p>
+                <p>Sort buffer size: <?= $sortBufferSize ?></p>
+                <p>Thread stack: <?= $threadStack ?></p>
+                <p>Max connections: <?= $maxConnections ?></p>
+                <p>Join buffer size: <?= $joinBufferSize ?></p>
+                <p>Tmp table size: <?= $tmpTableSize ?></p>
+                <p>Max heap table size: <?= $maxHeapTableSize ?></p>
+                <p>Log bin: <?= $logBin ?></p>
+                <p>Max used connections: <?= $maxUsedConnections ?></p>
+                <p>Binlog cache size: <?= $binlogCacheSize ?></p>
+                <p>Effective tmp table size: <?= $effectiveTmpTableSize ?></p>
+                <p>Per thread buffers: <?= human_readable($perThreadBuffers) ?></p>
+                <p>Per thread max buffers: <?= $perThreadMaxBuffers ?></p>
+                <p>InnoDB buffer pool size: <?= $innodbBufferPoolSize ?></p>
+                <p>InnoDB additional mem pool size: <?= $innodbAdditionalMemPoolSize ?></p>
+                <p>InnoDB log buffer size: <?= $innodbLogBufferSize ?></p>
+                <p>Key buffer size: <?= $keyBufferSize ?></p>
+                <p>Query cache size: <?= $queryCacheSize ?></p>
+                <p>Global buffers: <?= human_readable($globalBuffers) ?></p>
+                <p>Max memory: <?= human_readable($maxMemory) ?></p>
+                <p>Total memory: <?= human_readable($totalMemory) ?></p>
+                <p>Pct of sys mem: <?= $pctOfSysMem ?> %</p>
+                <p>Physical Memory: <?php echo human_readable($physicalMemory); ?></p>
+                <?php
+                if ($pctOfSysMem > 90) {
+                    ?>
+                    <div class="alert alert-danger" role="alert">
+                        Max memory limit exceeds 90% of physical memory
+                    </div>
+                    <?php
+                }
+                else {
+                    ?>
+                    <div class="alert alert-success" role="alert">
+                        Max memory limit seem to be within acceptable norms
+                    </div>
+                    <?php
+                }
+                ?>
+            </div>
+        </div>
+    </div>
+    <div class='row'>
+        <div class='card'>
+            <div class='card-header'>
+                Key buffer
+            </div>
+            <div class='card-body'>
+                <p>Key read requests: <?= $keyReadRequests ?></p>
+                <p>Key reads: <?= $keyReads ?></p>
+                <p>Key blocks used: <?= $keyBlocksUsed ?></p>
+                <p>Key blocks unused: <?= $keyBlocksUnused ?></p>
+                <p>Key cache block size: <?= $keyCacheBlockSize ?></p>
+                <p>Key buffer size: <?= $keyBufferSize ?></p>
+                <p>Data dir: <?= $dataDir ?></p>
+                <p>Version compile machine: <?= $versionCompileMachine ?></p>
+                <?php
+                if ($keyReads == 0) {
+                    ?>
+                    <div class="alert alert-danger" role="alert">
+                       No key reads?! Seriously look into using some indexes
+                    </div>
+                    <?php
+                }
+                ?>
+                <p>Key cache miss rate is 1 : <?php echo $keyCacheMissRate; ?></p>
+                <p>Key buffer free ratio: <?php echo $keyBufferFree; ?></p>
+                <?php
+                if ($keyCacheMissRate <= 100 && $keyCacheMissRate > 0 && $keyBufferFree < 20) {
+                    ?>
+                    <div class="alert alert-warning" role="alert">
+                        You could increate key_buffer_size. It is safe to raise this up to 1/4 of total system memory.
+                    </div>
+                    <?php
+                }
+                elseif ($keyCacheMissRate >= 10000 || $keyBufferFree < 50) {
+                    ?>
+                    <div class="alert alert-warning" role="alert">
+                        Your key_buffer_size seems to be too high. Perhaps you can use these resources elsewhere.
+                    </div>
+                    <?php
+                }
+                else {
+                    ?>
+                    <div class="alert alert-success" role="alert">
+                        Your key_buffer_size seems to be fine
+                    </div>
+                    <?php
+                }
+                ?>
+            </div>
+        </div>
+    </div>
+    <div class='row'>
+        <div class='card'>
+            <div class='card-header'>
+                Query cache
+            </div>
+            <div class='card-body'>
+                <p>Query cache size: <?= $queryCacheSize ?></p>
+                <p>Query cache limit: <?= $queryCacheLimit ?></p>
+                <p>Query cache min res unit: <?= $queryCacheMinResUnit ?></p>
+                <p>Qcache free memory: <?= $qcacheFreeMemory ?></p>
+                <p>Qcache total blocks: <?= $qcacheTotalBlocks ?></p>
+                <p>Qcache free blocks: <?= $qcacheFreeBlocks ?></p>
+                <p>Qcache lowmem prunes: <?= $qcacheLowmemPrunes ?></p>
+                <?php
+                if ($queryCacheSize == 0) {
+                    ?>
+                    <div class="alert alert-info" role="alert">
+                        Query cache is supported but not enabled. Perhaps you should set the query_cache_size
+                    </div>
+                    <?php
+                }
+                ?>
+                <p>Query cache used memory: <?= $qcacheUsedMemory ?></p>
+                <p>Query cache mem fill ratio: <?= $qcacheMemFillRatio ?></p>
+            </div>
+        </div>
+    </div>
+    <div class='row'>
+        <div class='card'>
+            <div class='card-header'>
+                Sort operations
+            </div>
+            <div class='card-body'>
+                <p>Sort merge passes: <?= $sortMergePasses ?></p>
+                <p>Sort scan: <?= $sortScan ?></p>
+                <p>Sort range: <?= $sortRange ?></p>
+                <p>Sort buffer size: <?= human_readable($sortBufferSize) ?></p>
+                <p>Read rnd buffer size: <?= human_readable($readRndBufferSize) ?></p>
+                <p>Total sorts: <?= $totalSorts ?></p>
+                <?php
+                if ($totalSorts == 0) {
+                    ?>
+                    <div class="alert alert-info" role="alert">
+                        No sort operations have been performed
+                    </div>
+                    <?php
+                }
+                ?>
+            </div>
+        </div>
+    </div>
+    <div class='row'>
+        <div class='card'>
+            <div class='card-header'>
+                Joins
+            </div>
+            <div class='card-body'>
+                <p>Select full join: <?= $selectFullJoin ?></p>
+                <p>Select range check: <?= $selectRangeCheck ?></p>
+                <p>Join buffer size: <?= human_readable($joinBufferSize) ?></p>
+                <?php
+                if ($selectRangeCheck == 0 && $selectFullJoin == 0) {
+                    ?>
+                    <div class="alert alert-success" role="alert">
+                        Your joins seem to be using indexes properly
+                    </div>
+                    <?php
+                }
+                ?>
+            </div>
+        </div>
+    </div>
+</div>
 
 <h1>GLOBAL STATUS</h1>
 <a class="btn btn-primary" data-toggle="collapse" href="#collapseStatus" role="button" aria-expanded="false"
