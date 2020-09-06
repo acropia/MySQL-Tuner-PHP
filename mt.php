@@ -21,6 +21,16 @@ function human_readable_time($seconds) {
     return floor($seconds / 86400) . " days, " . ($seconds / 3600 % 24) . " hrs, " . ($seconds / 60 % 60) . " min";
 }
 
+function human_readable_comma_enum($string) {
+    $parts = explode(",", $string);
+    $list = "<ul>";
+    foreach ($parts as $part) {
+        $list .= "<li>" . trim($part) . "</li>";
+    }
+    $list .= "</ul>";
+    return $list;
+}
+
 $user = getenv("MTP_USER");
 $pass = getenv("MTP_PASS");
 $host = getenv("MTP_HOST");
@@ -66,9 +76,18 @@ $threadsConnected = $globalStatus['Threads_connected'];
 
 /* Slow queries */
 $slowQueries = $globalStatus['Slow_queries'];
+$logOutput = $globalVariables['log_output'];
+$logQueriesNotUsingIndexes = $globalVariables['log_queries_not_using_indexes'];
+$logSlowAdminStatements = $globalVariables['log_slow_admin_statements'];
+$logSlowDisabledStatements = $globalVariables['log_slow_disabled_statements'];
+$logSlowFilter = $globalVariables['log_slow_filter'];
+$logSlowRateLimit = $globalVariables['log_slow_rate_limit'];
+$logSlowVerbosity = $globalVariables['log_slow_verbosity'];
 $longQueryTime = $globalVariables['long_query_time'];
+$minExaminedRowLimit = $globalVariables['min_examined_row_limit'];
 $slowQueryLog = $globalVariables['slow_query_log'];
 $slowQueryLogFile = $globalVariables['slow_query_log_file'];
+$slowQueriesPct = $slowQueryLog * 100 / $questions;
 
 /* Binary log */
 $logBin = $globalVariables['log_bin'];
@@ -79,7 +98,8 @@ $syncBinlog = $globalVariables['sync_binlog'];
 /* Threads */
 $threadsCreated = $globalStatus['Threads_created'];
 $threadsCached = $globalStatus['Threads_cached'];
-$threadsCacheSize = $globalVariables['thread_cache_size'];
+$threadHandling = $globalVariables['thread_handling'];
+$threadCacheSize = $globalVariables['thread_cache_size'];
 $historicThreadsPerSec = $threadsCreated / $uptime;
 
 /* Used connections */
@@ -90,15 +110,22 @@ $connectionsRatio = ($maxUsedConnections * 100 / $maxConnections);
 
 /* InnoDB */
 $innodbBufferPoolSize = $globalVariables['innodb_buffer_pool_size'];
-$innodbAdditionalMemPoolSize = $globalVariables['innodb_additional_mem_pool_size'];
+$innodbFilePerTable = $globalVariables['innodb_file_per_table'];
 $innodbFastShutdown = $globalVariables['innodb_fast_shutdown'];
 $innodbFlushLogAtTrxCommit = $globalVariables['innodb_flush_log_at_trx_commit'];
-$innodbLocksUnsafeForBinlog = $globalVariables['innodb_locks_unsafe_for_binlog'];
 $innodbLogBufferSize = $globalVariables['innodb_log_buffer_size'];
 $innodbLogFileSize = $globalVariables['innodb_log_file_size'];
 $innodbLogFilesInGroup = $globalVariables['innodb_log_files_in_group'];
-$innodbSafeBinlog = $globalVariables['innodb_safe_binlog'];
-$innodbThreadConcurrency = $globalVariables['innodb_thread_concurrency'];
+$innodbBufferPoolBytesData = $globalStatus['Innodb_buffer_pool_bytes_data'];
+$innodbBufferPoolBytesDirty = $globalStatus['Innodb_buffer_pool_bytes_dirty'];
+$innodbBufferPoolReads = $globalStatus['Innodb_buffer_pool_reads'];
+$innodbBufferPoolReadRequests = $globalStatus['Innodb_buffer_pool_read_requests'];
+$innodbBufferPoolWaitFree = $globalStatus['Innodb_buffer_pool_wait_free'];
+$innodbDataRead = $globalStatus['Innodb_data_read'];
+$innodbDataReads = $globalStatus['Innodb_data_reads'];
+$innodbDataWrites = $globalStatus['Innodb_data_writes'];
+$innodbDataWritten = $globalStatus['Innodb_data_written'];
+$innodbBufferPoolReadRatio = $innodbBufferPoolReads * 100 / $innodbBufferPoolReadRequests;
 
 /* InnoDB Index Length */
 $innodbIndexLength = 0;
@@ -117,7 +144,6 @@ if ($innodbIndexLength > 0) {
     $innodbBufferPoolPagesFree = $globalStatus['Innodb_buffer_pool_pages_free'];
     $innodbBufferPoolPagesTotal = $globalStatus['Innodb_buffer_pool_pages_total'];
     $innodbBufferPoolReadAheadSeq = $globalStatus['Innodb_buffer_pool_read_ahead_seq'];
-    $innodbBufferPoolReadRequests = $globalStatus['Innodb_buffer_pool_read_requests'];
     $innodbOsLogPendingFsyncs = $globalStatus['Innodb_os_log_pending_fsyncs'];
     $innodbOsLogPendingWrites = $globalStatus['Innodb_os_log_pending_writes'];
     $innodbLogWaits = $globalStatus['Innodb_log_waits'];
@@ -152,6 +178,7 @@ else {
     $effectiveTmpTableSize = $tmpTableSize;
 }
 
+$perThreadBufferSize = $readBufferSize + $readRndBufferSize + $sortBufferSize + $threadStack + $joinBufferSize + $binlogCacheSize;
 $perThreadBuffers = ($readBufferSize + $readRndBufferSize + $sortBufferSize + $threadStack + $joinBufferSize + $binlogCacheSize) * $maxConnections;
 $perThreadMaxBuffers = ($readBufferSize + $readRndBufferSize + $sortBufferSize + $threadStack + $joinBufferSize + $binlogCacheSize) * $maxUsedConnections;
 
@@ -169,10 +196,10 @@ $keyBufferSize = $globalVariables['key_buffer_size'];
 $queryCacheSize = $globalVariables['query_cache_size'];
 if (empty($queryCacheSize)) $queryCacheSize = 0;
 
-$globalBuffers = $innodbBufferPoolSize + $innodbAdditionalMemPoolSize + $innodbLogBufferSize + $keyBufferSize + $queryCacheSize;
+$globalBufferSize = $innodbBufferPoolSize + $innodbAdditionalMemPoolSize + $innodbLogBufferSize + $keyBufferSize + $queryCacheSize;
 
-$maxMemory = $globalBuffers + $perThreadMaxBuffers;
-$totalMemory = $globalBuffers + $perThreadBuffers;
+$maxMemory = $globalBufferSize + $perThreadMaxBuffers;
+$totalMemory = $globalBufferSize + $perThreadBuffers;
 
 $pctOfSysMem = $totalMemory * 100 / $physicalMemory;
 
@@ -200,7 +227,13 @@ else {
     }
 }
 
+/* MyISAM Index Length */
+$myisamIndexLength = 0;
+$stmt = $pdo->query("SELECT IFNULL(SUM(INDEX_LENGTH),0) AS index_length FROM information_schema.TABLES WHERE ENGINE='MyISAM'");
+$myisamIndexLength = $stmt->fetch()['index_length'];
+
 /* Query cache */
+$queryCacheType = $globalVariables['query_cache_type'];
 $queryCacheSize = $globalVariables['query_cache_size'];
 $queryCacheLimit = $globalVariables['query_cache_limit'];
 $queryCacheMinResUnit = $globalVariables['query_cache_min_res_unit'];
@@ -219,6 +252,7 @@ $sortRange = $globalStatus['Sort_range'];
 $sortBufferSize = $globalVariables['sort_buffer_size'];
 $readRndBufferSize = $globalVariables['read_rnd_buffer_size'];
 $totalSorts = $sortScan + $sortRange;
+$passesPerSort = ($sortMergePasses > 0) ? $sortMergePasses / $totalSorts : 0;
 
 /* Joins */
 $selectFullJoin = $globalStatus['Select_full_join'];
@@ -299,8 +333,21 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
 </head>
 <body>
 <div class='container'>
-    <nav class="navbar navbar-light bg-light">
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
         <a class="navbar-brand" href="#">MySQL-Tuner-PHP</a>
+        <div class="navbar-collapse" id="navbarSupportedContent">
+            <ul class="navbar-nav mr-auto">
+                <li class="nav-item">
+                    <a class="nav-link" href="#">Slow queries</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="#">Binary log</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="#">Threads</a>
+                </li>
+            </ul>
+        </div>
     </nav>
     <div class='row'>
         <div class='col-sm'>
@@ -324,6 +371,14 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                 <tr>
                     <td>Major version:</td>
                     <td><?= $majorVersion ?></td>
+                </tr>
+                <tr>
+                    <td>Data dir:</td>
+                    <td><?= $dataDir ?></td>
+                </tr>
+                <tr>
+                    <td>Compile machine:</td>
+                    <td><?= $versionCompileMachine ?></td>
                 </tr>
             </table>
         </div>
@@ -368,45 +423,134 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
             <div class='card'>
                 <div class='card-header'>Slow queries</div>
                 <div class='card-body'>
-                    <p>The slow query log is a record of SQL queries that took a long time to perform. Note that, if
-                        your queries contain user's passwords, the slow query log may contain passwords too. Thus, it
-                        should be protected.</p>
-                    <?php
-                    if ($slowQueryLog == "ON") {
-                        ?>
-                        <div class="alert alert-success" role="alert">
-                            Slow query log is enabled!
+                    <div class='row'>
+                        <div class='col-sm-8'>
+                            <p>The slow query log is a record of SQL queries that took a long time to perform. Note
+                                that, if
+                                your queries contain user's passwords, the slow query log may contain passwords too.
+                                Thus, it
+                                should be protected.</p>
+                            <p>More information on the Slow Query Log:<br>
+                                <a href='https://mariadb.com/kb/en/slow-query-log-overview/' target='_blank'>https://mariadb.com/kb/en/slow-query-log-overview/</a>
+                            </p>
                         </div>
-                        <?php
-                    }
-                    elseif ($slowQueryLog == "OFF" or empty($logSlowQueries)) {
-                        ?>
-                        <div class="alert alert-danger" role="alert">
-                            Slow query log is not enabled!
-                        </div>
-                        <?php
-                    }
-                    ?>
-                    <p>Long query time: <?= $longQueryTime ?></p>
-                    <p>Slow query log: <?= $slowQueryLog ?></p>
-                    <p>Slow query log file: <?= $slowQueryLogFile ?></p>
-                    <p>Since startup, <?= $slowQueries ?> out of <?= $questions ?> have taken longer
-                        than <?= $longQueryTime ?> sec. to complete.</p>
+                        <div class='col-sm-4'>
+                            <table class='table table-sm'>
+                                <tr>
+                                    <td>Slow query log:</td>
+                                    <td><?= $slowQueryLog ?>
 
+                                        <?php
+                                        if ($slowQueryLog == "ON") {
+                                            ?>
+                                            <div class="alert alert-success" role="alert">
+                                                Slow query log is enabled!
+                                            </div>
+                                            <?php
+                                        }
+                                        elseif ($slowQueryLog == "OFF" or empty($slowQueryLog)) {
+                                            ?>
+                                            <svg width="1.0625em" height="1em" viewBox="0 0 17 16"
+                                                 class="bi bi-exclamation-triangle-fill" fill="orange"
+                                                 xmlns="http://www.w3.org/2000/svg">
+                                                <path fill-rule="evenodd"
+                                                      d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5a.905.905 0 0 0-.9.995l.35 3.507a.552.552 0 0 0 1.1 0l.35-3.507A.905.905 0 0 0 8 5zm.002 6a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/>
+                                            </svg>
+                                            <span class="badge badge-warning float-right">Warning</span>
+                                            <?php
+                                        }
+                                        ?>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>Slow query count:</td>
+                                    <td><?= $slowQueries ?> of <?= $questions ?><br><?= $slowQueriesPct ?> %</td>
+                                </tr>
+                                <tr>
+                                    <td>Long query time:</td>
+                                    <td><?= round($longQueryTime) ?> sec.</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                    <table class='table table-sm'>
+                        <tr>
+                            <th>Variable name</th>
+                            <th>Default value</th>
+                            <th>Current value</th>
+                        </tr>
+                        <tr>
+                            <td><samp>slow_query_log</samp></td>
+                            <td>0 (= disabled)</td>
+                            <td><?= $slowQueryLog ?></td>
+                        </tr>
+                        <tr>
+                            <td><samp>log_output</samp></td>
+                            <td>FILE</td>
+                            <td><?= $logOutput ?></td>
+                        </tr>
+                        <tr>
+                            <td><samp>slow_query_log_file</samp></td>
+                            <td><i>host_name</i>-slow.log</td>
+                            <td><?= $slowQueryLogFile ?></td>
+                        </tr>
+                        <tr>
+                            <td><samp>long_query_time</samp></td>
+                            <td>10.000000</td>
+                            <td><?= $longQueryTime ?></td>
+                        </tr>
+                        <tr>
+                            <td><samp>log_queries_not_using_indexes</samp></td>
+                            <td>OFF</td>
+                            <td><?= $logQueriesNotUsingIndexes ?></td>
+                        </tr>
+                        <tr>
+                            <td><samp>log_slow_admin_statements</samp></td>
+                            <td>ON (>= MariaDB 10.2.4)<br>OFF (<= MariaDB 10.2.3)</td>
+                            <td><?= $logSlowAdminStatements ?></td>
+                        </tr>
+                        <tr>
+                            <td><samp>log_slow_disabled_statements</samp></td>
+                            <td>sp</td>
+                            <td><?= $logSlowDisabledStatements ?></td>
+                        </tr>
+                        <tr>
+                            <td><samp>min_examined_row_limit</samp></td>
+                            <td>0</td>
+                            <td><?= $minExaminedRowLimit ?></td>
+                        </tr>
+                        <tr>
+                            <td><samp>log_slow_rate_limit</samp></td>
+                            <td>1</td>
+                            <td><?= $logSlowRateLimit ?></td>
+                        </tr>
+                        <tr>
+                            <td><samp>log_slow_verbosity</samp></td>
+                            <td><i>(empty)</i></td>
+                            <td><?= $logSlowVerbosity ?></td>
+                        </tr>
+                        <tr>
+                            <td><samp>log_slow_filter</samp></td>
+                            <td><?= human_readable_comma_enum("admin, filesort, filesort_on_disk, full_join, full_scan, query_cache, query_cache_miss, tmp_table, tmp_table_on_disk") ?></td>
+                            <td><?= human_readable_comma_enum($logSlowFilter) ?></td>
+                        </tr>
+                    </table>
+                    <h3>Recommendations</h3>
                     <?php
                     if ($longQueryTime > $preferredQueryTime) {
                         ?>
                         <div class="alert alert-warning" role="alert">
-                            Your long_query_time may be too high, I typically set this under <?= $preferredQueryTime ?>
-                            sec.
+                            Configure <samp>long_query_time</samp> to a lower value, to investigate your slow queries
+                            even better. Recommendation: <?= $preferredQueryTime ?> sec.
                         </div>
                         <?php
                     }
                     elseif (round($longQueryTime) == 0) {
                         ?>
                         <div class="alert alert-warning" role="alert">
-                            Your long_query_time ios set to zero, which will cause ALL queries to be logged!<br>
-                            If you actually want to log all queries, use the query log, not the slow query log.
+                            Configure <samp>long_query_time</samp> to a high value. The current setting of zero, will
+                            cause ALL queries to be logged! If you actually want to log all queries, use the query log,
+                            not the slow query log.
                         </div>
                         <?php
                     }
@@ -416,451 +560,1067 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
         </div>
     </div>
     <div class='row'>
-        <div class='card'>
-            <div class='card-header'>
-                Binary log
-            </div>
-            <div class='card-body'>
-                
-                <?php
-                if ($logBin == "ON") {
-                    ?>
-                    <div class="alert alert-success" role="alert">
-                        The binary log is enabled!
+        <div class='col-sm-12'>
+            <div class='card'>
+                <div class='card-header'>
+                    Binary log
+                </div>
+                <div class='card-body'>
+                    <div class='row'>
+                        <div class='col-sm-8'>
+                            <p>The binary log contains a record of all changes to the databases, both data and
+                                structure, as well as how long each statement took to execute. It consists of a set of
+                                binary log files and an index.</p>
+                            <p>More information on the Binary Log:<br>
+                                <a href='https://mariadb.com/kb/en/overview-of-the-binary-log/' target='_blank'>https://mariadb.com/kb/en/overview-of-the-binary-log/</a>
+                            </p>
+                        </div>
+                        <div class='col-sm-4'>
+                            <table class='table table-sm'>
+                                <tr>
+                                    <td>Log bin:</td>
+                                    <td><?= $logBin ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Max binlog size:</td>
+                                    <td><?= human_readable($maxBinlogSize) ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Expire logs days:</td>
+                                    <td><?= $expireLogsDays ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Sync binlog:</td>
+                                    <td><?= $syncBinlog ?></td>
+                                </tr>
+                            </table>
+                        </div>
                     </div>
+                    <table class='table table-sm'>
+                        <tr>
+                            <th>Variable name</th>
+                            <th>Default value</th>
+                            <th>Current value</th>
+                        </tr>
+                        <tr>
+                            <td><samp>log_bin</samp></td>
+                            <td>OFF</td>
+                            <td><?= $logBin ?></td>
+                        </tr>
+                        <tr>
+                            <td><samp>max_binlog_size</samp></td>
+                            <td>1073741824</td>
+                            <td><?= $maxBinlogSize ?></td>
+                        </tr>
+                        <tr>
+                            <td><samp>expire_logs_days</samp></td>
+                            <td>0</td>
+                            <td><?= $expireLogsDays ?></td>
+                        </tr>
+                        <tr>
+                            <td><samp>sync_binlog</samp></td>
+                            <td>0</td>
+                            <td><?= $syncBinlog ?></td>
+                        </tr>
+                    </table>
                     <?php
-                }
-                else {
-                    ?>
-                    <div class="alert alert-danger" role="alert">
-                        The binary log is not enabled.
-                    </div>
-                    <?php
-                }
-                ?>
-                <p>Log bin: <?= $logBin ?></p>
-                <p>Max binlog size: <?= $maxBinlogSize ?></p>
-                <p>Expire logs days: <?= $expireLogsDays ?></p>
-                <p>Sync binlog: <?= $syncBinlog ?></p>
-            </div>
-        </div>
-    </div>
-    <div class='row'>
-        <div class='card'>
-            <div class='card-header'>
-                Threads
-            </div>
-            <div class='card-body'>
-                <p>Thread cache size: <?= $threadsCacheSize ?></p>
-                <p>Threads cached: <?= $threadsCached ?></p>
-                <p>Historic threads per sec: <?= round($historicThreadsPerSec, 4) ?></p>
-                <?php
-                if ($historicThreadsPerSec > 2 && $threadsCached < 1) {
-                    ?>
-                    <div class="alert alert-danger" role="alert">
-                        Threads created per/sec are overrunning threads cached
-                    </div>
-                    <?php
-                }
-                else {
-                    ?>
-                    <div class="alert alert-success" role="alert">
-                        Your thread_cache_size is fine
-                    </div>
-                    <?php
-                }
-                ?>
-            </div>
-        </div>
-    </div>
-    <div class='row'>
-        <div class='card'>
-            <div class='card-header'>
-                Used connections
-            </div>
-            <div class='card-body'>
-                <p>Max connections: <?= $maxConnections ?></p>
-                <p>Threads connected: <?= $threadsConnected ?></p>
-                <p>Historic max used connections: <?= $maxUsedConnections ?></p>
-                <p>Connections ratio: <?php echo round($connectionsRatio, 1); ?> %</p>
-                <?php
-                if ($connectionsRatio > 85) {
-                    ?>
-                    <div class="alert alert-danger" role="alert">
-                        You should raise max_connections
-                    </div>
-                    <?php
-                }
-                elseif ($connectionsRatio < 10) {
-                    ?>
-                    <div class="alert alert-danger" role="alert">
-                        You are using less than 10% of your configured max_connections. Lowering max_connections could
-                        help to avoid an over-allocation of memory.
-                    </div>
-                    <?php
-                }
-                else {
-                    ?>
-                    <div class="alert alert-success" role="alert">
-                        Your max_connections variable seems to be fine
-                    </div>
-                    <?php
-                }
-                ?>
-            </div>
-        </div>
-    </div>
-    <div class='row'>
-        <div class='card'>
-            <div class='card-header'>
-                InnoDB
-            </div>
-            <div class='card-body'>
-                <p>InnoDB buffer pool size: <?= human_readable($innodbBufferPoolSize) ?></p>
-                <p>InnoDB additional mem pool size: <?= $innodbAdditionalMemPoolSize ?></p>
-                <p>InnoDB fast shutdown: <?= $innodbFastShutdown ?></p>
-                <p>InnoDB flush log at trx commit: <?= $innodbFlushLogAtTrxCommit ?></p>
-                <p>InnoDB locks unsafe for binlog: <?= $innodbLocksUnsafeForBinlog ?></p>
-                <p>InnoDB log buffer size: <?= human_readable($innodbLogBufferSize) ?></p>
-                <p>InnoDB log file size: <?= human_readable($innodbLogFileSize) ?></p>
-                <p>InnoDB log files in group: <?= $innodbLogFilesInGroup ?></p>
-                <p>InnoDB safe binlog: <?= $innodbSafeBinlog ?></p>
-                <p>InnoDB thread concurrency: <?= $innodbThreadConcurrency ?></p>
-                <?php
-                if (!empty($innodbIndexLength)) {
-                    ?>
-                    <p>InnoDB buffer pool pages data: <?= $innodbBufferPoolPagesData ?></p>
-                    <p>InnoDB buffer pool pages misc: <?= $innodbBufferPoolPagesMisc ?></p>
-                    <p>InnoDB buffer pool pages free: <?= $innodbBufferPoolPagesFree ?></p>
-                    <p>InnoDB buffer pool pages total: <?= $innodbBufferPoolPagesTotal ?></p>
-                    <p>InnoDB buffer pool read ahead seq: <?= $innodbBufferPoolReadAheadSeq ?></p>
-                    <p>InnoDB buffer pool read requests: <?= $innodbBufferPoolReadRequests ?></p>
-                    <p>InnoDB os log pending fsyncs: <?= $innodbOsLogPendingFsyncs ?></p>
-                    <p>InnoDB os log pending writes: <?= $innodbOsLogPendingWrites ?></p>
-                    <p>InnoDB log waits: <?= $innodbLogWaits ?></p>
-                    <p>InnoDB row lock time: <?= $innodbRowLockTime ?></p>
-                    <p>InnoDB row lock waits: <?= $innodbRowLockWaits ?></p>
-                    <p>InnoDB index space: <?= human_readable($innodbIndexLength) ?></p>
-                    <p>InnoDB data space: <?= human_readable($innodbDataLength) ?></p>
-                    <p>InnoDB buffer pool free pct.: <?= round($innodbBufferPoolFreePct, 1) ?> %</p>
-                    <?php
-                }
-                ?>
-            </div>
-        </div>
-    </div>
-    <div class='row'>
-        <div class='card'>
-            <div class='card-header'>
-                Memory usage
-            </div>
-            <div class='card-body'>
-                <p>Read buffer size: <?= $readBufferSize ?></p>
-                <p>Read rnd buffer size: <?= $readRndBufferSize ?></p>
-                <p>Sort buffer size: <?= $sortBufferSize ?></p>
-                <p>Thread stack: <?= $threadStack ?></p>
-                <p>Max connections: <?= $maxConnections ?></p>
-                <p>Join buffer size: <?= $joinBufferSize ?></p>
-                <p>Tmp table size: <?= $tmpTableSize ?></p>
-                <p>Max heap table size: <?= $maxHeapTableSize ?></p>
-                <p>Log bin: <?= $logBin ?></p>
-                <p>Max used connections: <?= $maxUsedConnections ?></p>
-                <p>Binlog cache size: <?= $binlogCacheSize ?></p>
-                <p>Effective tmp table size: <?= $effectiveTmpTableSize ?></p>
-                <p>Per thread buffers: <?= human_readable($perThreadBuffers) ?></p>
-                <p>Per thread max buffers: <?= $perThreadMaxBuffers ?></p>
-                <p>InnoDB buffer pool size: <?= $innodbBufferPoolSize ?></p>
-                <p>InnoDB additional mem pool size: <?= $innodbAdditionalMemPoolSize ?></p>
-                <p>InnoDB log buffer size: <?= $innodbLogBufferSize ?></p>
-                <p>Key buffer size: <?= $keyBufferSize ?></p>
-                <p>Query cache size: <?= $queryCacheSize ?></p>
-                <p>Global buffers: <?= human_readable($globalBuffers) ?></p>
-                <p>Max memory: <?= human_readable($maxMemory) ?></p>
-                <p>Total memory: <?= human_readable($totalMemory) ?></p>
-                <p>Pct of sys mem: <?= $pctOfSysMem ?> %</p>
-                <p>Physical Memory: <?php echo human_readable($physicalMemory); ?></p>
-                <?php
-                if ($pctOfSysMem > 90) {
-                    ?>
-                    <div class="alert alert-danger" role="alert">
-                        Max memory limit exceeds 90% of physical memory
-                    </div>
-                    <?php
-                }
-                else {
-                    ?>
-                    <div class="alert alert-success" role="alert">
-                        Max memory limit seem to be within acceptable norms
-                    </div>
-                    <?php
-                }
-                ?>
-            </div>
-        </div>
-    </div>
-    <div class='row'>
-        <div class='card'>
-            <div class='card-header'>
-                Key buffer
-            </div>
-            <div class='card-body'>
-                <p>Key read requests: <?= $keyReadRequests ?></p>
-                <p>Key reads: <?= $keyReads ?></p>
-                <p>Key blocks used: <?= $keyBlocksUsed ?></p>
-                <p>Key blocks unused: <?= $keyBlocksUnused ?></p>
-                <p>Key cache block size: <?= $keyCacheBlockSize ?></p>
-                <p>Key buffer size: <?= $keyBufferSize ?></p>
-                <p>Data dir: <?= $dataDir ?></p>
-                <p>Version compile machine: <?= $versionCompileMachine ?></p>
-                <?php
-                if ($keyReads == 0) {
-                    ?>
-                    <div class="alert alert-danger" role="alert">
-                        No key reads?! Seriously look into using some indexes
-                    </div>
-                    <?php
-                }
-                ?>
-                <p>Key cache miss rate is 1 : <?php echo $keyCacheMissRate; ?></p>
-                <p>Key buffer free ratio: <?php echo $keyBufferFree; ?></p>
-                <?php
-                if ($keyCacheMissRate <= 100 && $keyCacheMissRate > 0 && $keyBufferFree < 20) {
-                    ?>
-                    <div class="alert alert-warning" role="alert">
-                        You could increate key_buffer_size. It is safe to raise this up to 1/4 of total system memory.
-                    </div>
-                    <?php
-                }
-                elseif ($keyCacheMissRate >= 10000 || $keyBufferFree < 50) {
-                    ?>
-                    <div class="alert alert-warning" role="alert">
-                        Your key_buffer_size seems to be too high. Perhaps you can use these resources elsewhere.
-                    </div>
-                    <?php
-                }
-                else {
-                    ?>
-                    <div class="alert alert-success" role="alert">
-                        Your key_buffer_size seems to be fine
-                    </div>
-                    <?php
-                }
-                ?>
-            </div>
-        </div>
-    </div>
-    <div class='row'>
-        <div class='card'>
-            <div class='card-header'>
-                Query cache
-            </div>
-            <div class='card-body'>
-                <p>Query cache size: <?= $queryCacheSize ?></p>
-                <p>Query cache limit: <?= $queryCacheLimit ?></p>
-                <p>Query cache min res unit: <?= $queryCacheMinResUnit ?></p>
-                <p>Qcache free memory: <?= $qcacheFreeMemory ?></p>
-                <p>Qcache total blocks: <?= $qcacheTotalBlocks ?></p>
-                <p>Qcache free blocks: <?= $qcacheFreeBlocks ?></p>
-                <p>Qcache lowmem prunes: <?= $qcacheLowmemPrunes ?></p>
-                <?php
-                if ($queryCacheSize == 0) {
-                    ?>
-                    <div class="alert alert-info" role="alert">
-                        Query cache is supported but not enabled. Perhaps you should set the query_cache_size
-                    </div>
-                    <?php
-                }
-                ?>
-                <p>Query cache used memory: <?= $qcacheUsedMemory ?></p>
-                <p>Query cache mem fill ratio: <?= $qcacheMemFillRatio ?></p>
-            </div>
-        </div>
-    </div>
-    <div class='row'>
-        <div class='card'>
-            <div class='card-header'>
-                Sort operations
-            </div>
-            <div class='card-body'>
-                <p>Sort merge passes: <?= $sortMergePasses ?></p>
-                <p>Sort scan: <?= $sortScan ?></p>
-                <p>Sort range: <?= $sortRange ?></p>
-                <p>Sort buffer size: <?= human_readable($sortBufferSize) ?></p>
-                <p>Read rnd buffer size: <?= human_readable($readRndBufferSize) ?></p>
-                <p>Total sorts: <?= $totalSorts ?></p>
-                <?php
-                if ($totalSorts == 0) {
-                    ?>
-                    <div class="alert alert-info" role="alert">
-                        No sort operations have been performed
-                    </div>
-                    <?php
-                }
-                ?>
-            </div>
-        </div>
-    </div>
-    <div class='row'>
-        <div class='card'>
-            <div class='card-header'>
-                Joins
-            </div>
-            <div class='card-body'>
-                <p>Select full join: <?= $selectFullJoin ?></p>
-                <p>Select range check: <?= $selectRangeCheck ?></p>
-                <p>Join buffer size: <?= human_readable($joinBufferSize) ?></p>
-                <?php
-                if ($selectRangeCheck == 0 && $selectFullJoin == 0) {
-                    ?>
-                    <div class="alert alert-success" role="alert">
-                        Your joins seem to be using indexes properly
-                    </div>
-                    <?php
-                }
-                if ($selectFullJoin > 0 || $selectRangeCheck > 0) {
-                    ?>
-                    <div class="alert alert-danger" role="alert">
-                        You should enable "log-queries-not-using-indexes" and look for non indexed joins in the slow
-                        query log.
-                    </div>
-                    <?php
-                    if ($raiseJoinBuffer) {
+                    if ($logBin == "ON") {
                         ?>
-                        <div class="alert alert-info" role="alert">
-                            If you are unable to optimize your queries you may want to increase your join_buffer_size to
-                            accomodate larger joins in one pass.
+                        <div class="alert alert-success" role="alert">
+                            The binary log is enabled!
                         </div>
                         <?php
                     }
-                }
-                if ($joinBufferSize >= 4 * 1024 * 1024) {
+                    else {
+                        ?>
+                        <div class="alert alert-danger" role="alert">
+                            The binary log is not enabled.
+                        </div>
+                        <?php
+                    }
                     ?>
-                    <div class="alert alert-danger" role="alert">
-                        It is not advised to have more than 4 M join_buffer_size.
-                    </div>
-                    <?php
-                }
-                ?>
+                </div>
             </div>
         </div>
     </div>
     <div class='row'>
-        <div class='card'>
-            <div class='card-header'>
-                Open files limit
-            </div>
-            <div class='card-body'>
-                <p>Open files limit: <?= $openFilesLimit ?></p>
-                <p>Open files: <?= $openFiles ?></p>
-                <p>Open files ratio: <?= $openFilesRatio ?></p>
-                <?php
-                if ($openFilesRatio >= 75) {
-                    ?>
-                    <div class="alert alert-danger" role="alert">
-                        You currently have open more than 75% of your open_file_limit.
+        <div class='col-sm-12'>
+            <div class='card'>
+                <div class='card-header'>
+                    Threads
+                </div>
+                <div class='card-body'>
+                    <div class='row'>
+                        <div class='col-sm-8'>
+                            <p>Connection manager threads handle client connection requests on the network interfaces
+                                that the server listens to. On all platforms, one manager thread handles TCP/IP
+                                connection requests. On Unix, this manager thread also handles Unix socket file
+                                connection requests. On Windows, a manager thread handles shared-memory connection
+                                requests, and another handles named-pipe connection requests. The server does not create
+                                threads to handle interfaces that it does not listen to. For example, a Windows server
+                                that does not have support for named-pipe connections enabled does not create a thread
+                                to handle them.</p>
+                        </div>
+                        <div class='col-sm-4'>
+                            <table class='table table-sm'>
+                                <tr>
+                                    <td>Thread handling:</td>
+                                    <td><?= $threadHandling ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Thread cache size:</td>
+                                    <td><?= $threadCacheSize ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Threads cached:</td>
+                                    <td><?= $threadsCached ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Threads per sec. avg.:</td>
+                                    <td><?= round($historicThreadsPerSec, 4) ?></td>
+                                </tr>
+                            </table>
+                        </div>
                     </div>
+                    <table class='table table-sm'>
+                        <tr>
+                            <th>Variable name</th>
+                            <th>Default value</th>
+                            <th>Current value</th>
+                        </tr>
+                        <tr>
+                            <td><samp>thread_handling</samp></td>
+                            <td>one-thread-per-connection</td>
+                            <td><?= $threadHandling ?></td>
+                        </tr>
+                        <tr>
+                            <td><samp>thread_cache_size</samp></td>
+                            <td>0 (<= MariaDB 10.1),<br>256 (from MariaDB 10.2.0)</td>
+                            <td><?= $threadCacheSize ?></td>
+                        </tr>
+                    </table>
                     <?php
-                }
-                else {
+                    if ($historicThreadsPerSec > 2 && $threadsCached < 1) {
+                        ?>
+                        <div class="alert alert-danger" role="alert">
+                            Threads created per/sec are overrunning threads cached
+                        </div>
+                        <?php
+                    }
+                    else {
+                        ?>
+                        <div class="alert alert-success" role="alert">
+                            Your thread_cache_size is fine
+                        </div>
+                        <?php
+                    }
                     ?>
-                    <div class="alert alert-success" role="alert">
-                        Your open_files_limit value seems to be fine.
-                    </div>
-                    <?php
-
-                }
-                ?>
-            </div>
-        </div>
-    </div>
-    <div class='row'>
-        <div class='card'>
-            <div class='card-header'>
-                Table cache
-            </div>
-            <div class='card-body'>
-                <p>Datadir: <?= $dataDir ?></p>
-                <p>Table cache: <?= $tableCache ?></p>
-                <p>Table open cache: <?= $tableOpenCache ?></p>
-                <p>Table definition cache: <?= $tableDefinitionCache ?></p>
-                <p>Open tables: <?= $openTables ?></p>
-                <p>Opened tables: <?= $openedTables ?></p>
-                <p>Open table definitions: <?= $openTableDefinitions ?></p>
-                <p>Table count: <?= $tableCount ?></p>
-                <p>Table cache hit rate: <?= $tableCacheHitRate ?></p>
-                <p>Table cache fill: <?= $tableCacheFill ?></p>
-                <?php
-                if ($tableCacheError) {
-                    ?>
-                    <div class="alert alert-danger" role="alert">
-                        No table cache?!
-                    </div>
-                    <?php
-                }
-
-                if ($tableCacheFill < 95) {
-                    ?>
-                    <div class="alert alert-success" role="alert">
-                        Your table_cache value seems to be fine
-                    </div>
-                    <?php
-                }
-                elseif ($tableCacheHitRate <= 85 || $tableCacheFill >= 95) {
-                    ?>
-                    <div class="alert alert-danger" role="alert">
-                        You should probably increase your table_cache
-                    </div>
-                    <?php
-                }
-                else {
-                    ?>
-                    <div class="alert alert-success" role="alert">
-                        Your table_cache value seems to be fine.
-                    </div>
-                    <?php
-                }
-                ?>
+                </div>
             </div>
         </div>
     </div>
     <div class='row'>
-        <div class='card'>
-            <div class='card-header'>
-                Temp tables
+        <div class='col-sm-12'>
+            <div class='card'>
+                <div class='card-header'>
+                    Used connections
+                </div>
+                <div class='card-body'>
+                    <div class='row'>
+                        <div class='col-sm-8'>
+                        </div>
+                        <div class='col-sm-4'>
+                            <table class='table table-sm'>
+                                <tr>
+                                    <td>Max connections:</td>
+                                    <td><?= $maxConnections ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Threads connected:</td>
+                                    <td><?= $threadsConnected ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Max used connections:</td>
+                                    <td><?= $maxUsedConnections ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Connections ratio:</td>
+                                    <td><?= round($connectionsRatio, 1) ?> %</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                    <?php
+                    if ($connectionsRatio > 85) {
+                        ?>
+                        <div class="alert alert-danger" role="alert">
+                            You should raise max_connections
+                        </div>
+                        <?php
+                    }
+                    elseif ($connectionsRatio < 10) {
+                        ?>
+                        <div class="alert alert-danger" role="alert">
+                            You are using less than 10% of your configured max_connections. Lowering max_connections
+                            could
+                            help to avoid an over-allocation of memory.
+                        </div>
+                        <?php
+                    }
+                    else {
+                        ?>
+                        <div class="alert alert-success" role="alert">
+                            Your max_connections variable seems to be fine
+                        </div>
+                        <?php
+                    }
+                    ?>
+                </div>
             </div>
-            <div class='card-body'>
-                <p>Created tmp tables: <?= $createdTmpTables ?></p>
-                <p>Created tmp disk tables: <?= $createdTmpDiskTables ?></p>
-                <p>Tmp table size: <?= human_readable($tmpTableSize) ?></p>
-                <p>Max heap table size: <?= human_readable($maxHeapTableSize) ?></p>
-                <p>Tmp disk tables: <?= round($tmpDiskTables, 1) ?></p>
-                <?php
-                if ($tmpTableSize > $maxHeapTableSize) {
-                    ?>
-                    <div class="alert alert-warning" role="alert">
-                        Effective in-memory tmp_table_size is limited to max_heap_table_size.
+        </div>
+    </div>
+    <div class='row'>
+        <div class='col-sm-12'>
+            <div class='card'>
+                <div class='card-header'>
+                    InnoDB
+                </div>
+                <div class='card-body'>
+                    <div class='row'>
+                        <div class='col-sm-8'>
+                            <p>The XtraDB/InnoDB buffer pool is a key component for optimizing MariaDB. It stores data
+                                and indexes, and you usually want it as large as possible so as to keep as much of the
+                                data and indexes in memory, reducing disk IO, as main bottleneck.</p>
+                            <p>The buffer pool attempts to keep frequently-used blocks in the buffer, and so essentially
+                                works as two sublists, a new sublist of recently-used information, and an old sublist of
+                                older information. By default, 37% of the list is reserved for the old list.</p>
+                            <p>When new information is accessed that doesn't appear in the list, it is placed at the top
+                                of the old list, the oldest item in the old list is removed, and everything else bumps
+                                back one position in the list.</p>
+                            <p>When information is accessed that appears in the old list, it is moved to the top the new
+                                list, and everything above moves back one position.</p>
+                            <p>More information on the InnoDB Buffer Pool:<br>
+                                <a href='https://mariadb.com/kb/en/innodb-buffer-pool/' target='_blank'>https://mariadb.com/kb/en/innodb-buffer-pool/</a>
+                            </p>
+                        </div>
+                        <div class='col-sm-4'>
+                            <table class='table table-sm'>
+                                <tr>
+                                    <td>Index space:</td>
+                                    <td><?= human_readable($innodbIndexLength) ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Data space:</td>
+                                    <td><?= human_readable($innodbDataLength) ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Data read / written:</td>
+                                    <td><?= human_readable($innodbDataRead) ?>
+                                        / <?= human_readable($innodbDataWritten) ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Data reads / writes:</td>
+                                    <td><?= human_readable($innodbDataReads) ?>
+                                        / <?= human_readable($innodbDataWrites) ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Buffer pool size:</td>
+                                    <td><?= human_readable($innodbBufferPoolSize) ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Buffer pool free pct.:</td>
+                                    <td><?= round($innodbBufferPoolFreePct, 1) ?> %</td>
+                                </tr>
+                                <tr>
+                                    <td>Buffer pool bytes data:</td>
+                                    <td><?= human_readable($innodbBufferPoolBytesData) ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Buffer pool bytes dirty:</td>
+                                    <td><?= human_readable($innodbBufferPoolBytesDirty) ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Buffer pool read requests:</td>
+                                    <td><?= $innodbBufferPoolReadRequests ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Buffer pool reads:</td>
+                                    <td><?= $innodbBufferPoolReads ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Buffer pool read ratio:</td>
+                                    <td><?= round($innodbBufferPoolReadRatio, 2) ?> %</td>
+                                </tr>
+                                <tr>
+                                    <td>Buffer pool wait free:</td>
+                                    <td><?= $innodbBufferPoolWaitFree ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Row lock time:</td>
+                                    <td><?= $innodbRowLockTime ?> msec.</td>
+                                </tr>
+                                <tr>
+                                    <td>Row lock waits:</td>
+                                    <td><?= $innodbRowLockWaits ?></td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                    <table class='table table-sm'>
+                        <tr>
+                            <th>Variable name</th>
+                            <th>Default value</th>
+                            <th>Current value</th>
+                        </tr>
+                        <tr>
+                            <td><samp>innodb_buffer_pool_size</samp></td>
+                            <td>134217728 (128 MB)</td>
+                            <td><?= $innodbBufferPoolSize ?> (<?= human_readable($innodbBufferPoolSize) ?>)</td>
+                        </tr>
+                        <tr>
+                            <td><samp>innodb_fast_shutdown</samp></td>
+                            <td>1</td>
+                            <td><?= $innodbFastShutdown ?></td>
+                        </tr>
+                        <tr>
+                            <td><samp>innodb_file_per_table</samp></td>
+                            <td>ON</td>
+                            <td><?= $innodbFilePerTable ?></td>
+                        </tr>
+                        <tr>
+                            <td><samp>innodb_flush_log_at_trx_commit</samp></td>
+                            <td>1</td>
+                            <td><?= $innodbFlushLogAtTrxCommit ?></td>
+                        </tr>
+                        <tr>
+                            <td><samp>innodb_log_buffer_size</samp></td>
+                            <td>16777216 (16MB) >= MariaDB 10.1.9<br>8388608 (8MB) <= MariaDB 10.1.8</td>
+                            <td><?= $innodbLogBufferSize ?> (<?= human_readable($innodbLogBufferSize) ?>)</td>
+                        </tr>
+                        <tr>
+                            <td><samp>innodb_log_file_size</samp></td>
+                            <td>100663296 (96MB) (>= MariaDB 10.5)<br>50331648 (48MB) (<= MariaDB 10.4)</td>
+                            <td><?= $innodbLogFileSize ?> (<?= human_readable($innodbLogFileSize) ?>)</td>
+                        </tr>
+                        <tr>
+                            <td><samp>innodb_log_files_in_group</samp></td>
+                            <td>1 <span class='text-muted'>(>= MariaDB 10.5)</span><br>2 (<= MariaDB 10.4)</td>
+                            <td><?= $innodbLogFilesInGroup ?></td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class='row'>
+        <div class='col-sm-12'>
+            <div class='card'>
+                <div class='card-header'>
+                    Memory usage
+                </div>
+                <div class='card-body'>
+                    <div class='row'>
+                        <div class='col-sm-8'>
+                        </div>
+                        <div class='col-sm-4'>
+                            <table class='table table-sm'>
+                                <tr>
+                                    <td>Physical Memory:</td>
+                                    <td><?= human_readable($physicalMemory); ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Global buffer size:</td>
+                                    <td><?= human_readable($globalBufferSize) ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Per-thread buffer size:</td>
+                                    <td><?= human_readable($perThreadBufferSize) ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Max theoretical memory:</td>
+                                    <td><?= human_readable($totalMemory) ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Max used memory:</td>
+                                    <td><?= human_readable($maxMemory) ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Pct of sys mem:</td>
+                                    <td><?= round($pctOfSysMem, 1) ?> %</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                    <div class='row'>
+                        <div class='col-sm-4'>
+                            <h5>Global buffer size</h5>
+                            <p>Calculation of the global available buffers in this server.</p>
+                            <table class='table table-sm'>
+                                <tr>
+                                    <td>InnoDB buffer pool size:</td>
+                                    <td align='right'><?= $innodbBufferPoolSize ?></td>
+                                    <td>+</td>
+                                </tr>
+                                <tr>
+                                    <td>InnoDB additional mem pool size:</td>
+                                    <td align='right'><?= $innodbAdditionalMemPoolSize ?></td>
+                                    <td>+</td>
+                                </tr>
+                                <tr>
+                                    <td>InnoDB log buffer size:</td>
+                                    <td align='right'><?= $innodbLogBufferSize ?></td>
+                                    <td>+</td>
+                                </tr>
+                                <tr>
+                                    <td>Key buffer size:</td>
+                                    <td align='right'><?= $keyBufferSize ?></td>
+                                    <td>+</td>
+                                </tr>
+                                <tr>
+                                    <td>Query cache size:</td>
+                                    <td align='right'><?= $queryCacheSize ?></td>
+                                    <td>+</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Total global buffer size:</strong></td>
+                                    <td align='right'><strong><?= $globalBufferSize ?></strong></td>
+                                    <td>&nbsp;</td>
+                                </tr>
+                                <tr>
+                                    <td>&nbsp;</td>
+                                    <td align='right'><span
+                                                class='text-muted'><?= human_readable($globalBufferSize) ?></span></td>
+                                    <td>&nbsp;</td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div class='col-sm-4'>
+                            <h5>Per-thread buffer size</h5>
+                            <p>Calculation of the buffer each independent thread can use.</p>
+                            <table class='table table-sm'>
+                                <tr>
+                                    <td>Read buffer size:</td>
+                                    <td align='right'><?= $readBufferSize ?></td>
+                                    <td>+</td>
+                                </tr>
+                                <tr>
+                                    <td>Read rnd buffer size:</td>
+                                    <td align='right'><?= $readRndBufferSize ?></td>
+                                    <td>+</td>
+                                </tr>
+                                <tr>
+                                    <td>Sort buffer size:</td>
+                                    <td align='right'><?= $sortBufferSize ?></td>
+                                    <td>+</td>
+                                </tr>
+                                <tr>
+                                    <td>Thread stack:</td>
+                                    <td align='right'><?= $threadStack ?></td>
+                                    <td>+</td>
+                                </tr>
+                                <tr>
+                                    <td>Join buffer size:</td>
+                                    <td align='right'><?= $joinBufferSize ?></td>
+                                    <td>+</td>
+                                </tr>
+                                <tr>
+                                    <td>Binlog cache size:</td>
+                                    <td align='right'><?= $binlogCacheSize ?></td>
+                                    <td>+</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Total per-thread buffer size:</strong></td>
+                                    <td align='right'><strong><?= $perThreadBufferSize ?></strong></td>
+                                    <td>&nbsp;</td>
+                                </tr>
+                                <tr>
+                                    <td>&nbsp;</td>
+                                    <td align='right'><span
+                                                class='text-muted'><?= human_readable($perThreadBufferSize) ?></span>
+                                    </td>
+                                    <td>&nbsp;</td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div class='col-sm-4'>
+                            <h5>Total thread buffers</h5>
+                            <p>Calculations of the cumulative thread buffers. These are calculation for two different
+                                scenarios. Formula: connections &times; buffer size</p>
+                            <table class='table table-sm'>
+                                <tr>
+                                    <td>Max connections:</td>
+                                    <td align='right'><?= $maxConnections ?>
+                                        &times; <?= human_readable($perThreadBufferSize) ?> =
+                                    </td>
+                                    <td align='right'><?= human_readable($perThreadBuffers) ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Max used connections:</td>
+                                    <td align='right'><?= $maxUsedConnections ?>
+                                        &times; <?= human_readable($perThreadBufferSize) ?> =
+                                    </td>
+                                    <td align='right'><?= human_readable($perThreadMaxBuffers) ?></td>
+                                </tr>
+                            </table>
+                        </div>
                     </div>
                     <?php
-                }
+                    if ($pctOfSysMem > 90) {
+                        ?>
+                        <div class="alert alert-danger" role="alert">
+                            Max memory limit exceeds 90% of physical memory
+                        </div>
+                        <?php
+                    }
+                    else {
+                        ?>
+                        <div class="alert alert-success" role="alert">
+                            Max memory limit seem to be within acceptable norms
+                        </div>
+                        <?php
+                    }
+                    ?>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class='row'>
+        <div class='col-sm-12'>
+            <div class='card'>
+                <div class='card-header'>
+                    Key buffer
+                </div>
+                <div class='card-body'>
+                    <div class='row'>
+                        <div class='col-sm-8'>
+                            <p>key_buffer_size is a MyISAM variable which determines the size of the index buffers held
+                                in memory, which affects the speed of index reads. Note that Aria tables by default make
+                                use of an alternative setting, aria-pagecache-buffer-size.</p>
+                            <p>More information on optimizing the Key Buffer Size:<br>
+                                <a href='https://mariadb.com/kb/en/optimizing-key_buffer_size/' target='_blank'>https://mariadb.com/kb/en/optimizing-key_buffer_size/</a>
+                            </p>
+                        </div>
+                        <div class='col-sm-4'>
+                            <table class='table table-sm'>
+                                <tr>
+                                    <td>MyISAM Index Size:</td>
+                                    <td><?= human_readable($myisamIndexLength) ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Key buffer size:</td>
+                                    <td><?= human_readable($keyBufferSize) ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Key cache miss rate is:</td>
+                                    <td>1 : <?= round($keyCacheMissRate) ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Key buffer free ratio:</td>
+                                    <td><?= round($keyBufferFree) ?> %</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                    <table class='table table-sm'>
+                        <tr>
+                            <th>Variable name</th>
+                            <th>Default value</th>
+                            <th>Current value</th>
+                        </tr>
+                        <tr>
+                            <td><samp>key_buffer_size</samp></td>
+                            <td>134217728 <span class='text-muted'>(128 MB)</span></td>
+                            <td><?= $keyBufferSize ?> <span
+                                        class='text-muted'>(<?= human_readable($keyBufferSize) ?>)</span></td>
+                        </tr>
+                        <tr>
+                            <td><samp>key_cache_block_size</samp></td>
+                            <td>1024 <span class='text-muted'>(1 KB)</span></td>
+                            <td><?= $keyCacheBlockSize ?> <span
+                                        class='text-muted'>(<?= human_readable($keyCacheBlockSize) ?>)</span></td>
+                        </tr>
+                    </table>
+                    <?php
+                    if ($keyReads == 0) {
+                        ?>
+                        <div class="alert alert-danger" role="alert">
+                            No key reads?! Seriously look into using some indexes
+                        </div>
+                        <?php
+                    }
+                    if ($keyCacheMissRate <= 100 && $keyCacheMissRate > 0 && $keyBufferFree < 20) {
+                        ?>
+                        <div class="alert alert-warning" role="alert">
+                            You could increate key_buffer_size. It is safe to raise this up to 1/4 of total system
+                            memory.
+                        </div>
+                        <?php
+                    }
+                    elseif ($keyCacheMissRate >= 10000 || $keyBufferFree < 50) {
+                        ?>
+                        <div class="alert alert-warning" role="alert">
+                            Your key_buffer_size seems to be too high. Perhaps you can use these resources elsewhere.
+                        </div>
+                        <?php
+                    }
+                    else {
+                        ?>
+                        <div class="alert alert-success" role="alert">
+                            Your key_buffer_size seems to be fine
+                        </div>
+                        <?php
+                    }
+                    ?>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class='row'>
+        <div class='col-sm-12'>
+            <div class='card'>
+                <div class='card-header'>
+                    Query cache
+                </div>
+                <div class='card-body'>
+                    <div class='row'>
+                        <div class='col-sm-8'>
+                            <p>The query cache stores results of SELECT queries so that if the identical query is
+                                received in future, the results can be quickly returned.</p>
+                            <p>This is extremely useful in high-read, low-write environments (such as most websites). It
+                                does not scale well in environments with high throughput on multi-core machines, so it
+                                is disabled by default.</p>
+                            <p>More information on optimizing the Query Cache:<br>
+                                <a href='https://mariadb.com/kb/en/query-cache/' target='_blank'>https://mariadb.com/kb/en/query-cache/</a>
+                            </p>
+                        </div>
+                        <div class='col-sm-4'>
+                            <table class='table table-sm'>
+                                <tr>
+                                    <td>Query cache type:</td>
+                                    <td><?= $queryCacheType ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Query cache size:</td>
+                                    <td><?= human_readable($queryCacheSize) ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Query cache used memory:</td>
+                                    <td><?= human_readable($qcacheUsedMemory) ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Query cache memory fill ratio:</td>
+                                    <td><?= round($qcacheMemFillRatio, 2) ?> %</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                    <table class='table table-sm'>
+                        <tr>
+                            <th>Variable name</th>
+                            <th>Default value</th>
+                            <th>Current value</th>
+                        </tr>
+                        <tr>
+                            <td><samp>query_cache_limit</samp></td>
+                            <td>1048576 <span class='text-muted'>(1 MB)</span></td>
+                            <td><?= $queryCacheLimit ?> <span
+                                        class='text-muted'>(<?= human_readable($queryCacheLimit) ?>)</span></td>
+                        </tr>
+                        <tr>
+                            <td><samp>query_cache_min_res_limit</samp></td>
+                            <td>4096 <span class='text-muted'>(4 KB)</span></td>
+                            <td><?= $queryCacheMinResUnit ?> <span
+                                        class='text-muted'>(<?= human_readable($queryCacheMinResUnit) ?>)</span></td>
+                        </tr>
+                        <tr>
+                            <td><samp>query_cache_size</samp></td>
+                            <td>1 M<span class='text-muted'>(>= MariaDB 10.1.7)</span><br>0 <span class='text-muted'>(<= MariaDB 10.1.6)</span>
+                            </td>
+                            <td><?= $queryCacheSize ?> <span
+                                        class='text-muted'>(<?= human_readable($queryCacheSize) ?>)</span></td>
+                        </tr>
+                        <tr>
+                            <td><samp>query_cache_type</samp></td>
+                            <td>OFF <span class='text-muted'>(>= MariaDB 10.1.7)</span><br>ON <span class='text-muted'>(<= MariaDB 10.1.6)</span>
+                            </td>
+                            <td><?= $queryCacheType ?></td>
+                        </tr>
+                    </table>
+                    <?php
+                    if ($queryCacheSize == 0) {
+                        ?>
+                        <div class="alert alert-info" role="alert">
+                            Query cache is supported but not enabled. Perhaps you should set the query_cache_size
+                        </div>
+                        <?php
+                    }
+                    if ($queryCacheSize > 0 && $queryCacheType) {
+                        ?>
+                        <div class="alert alert-warning" role="alert">
+                            Query cache is disabled by query_cache_type, but effectively enabled because
+                            query_cache_size is higher than zero.
+                        </div>
+                        <?php
+                    }
+                    ?>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class='row'>
+        <div class='col-sm-12'>
+            <div class='card'>
+                <div class='card-header'>
+                    Sort operations
+                </div>
+                <div class='card-body'>
+                    <div class='row'>
+                        <div class='col-sm-8'>
+                            <p>Each session performing a sort allocates a buffer with this amount of memory. Not
+                                specific to any storage engine. If the status variable sort_merge_passes is too high,
+                                you may need to look at improving your query indexes, or increasing this. Consider
+                                reducing where there are many small sorts, such as OLTP, and increasing where needed by
+                                session. 16k is a suggested minimum.</p>
+                        </div>
+                        <div class='col-sm-4'>
+                            <table class='table table-sm'>
+                                <tr>
+                                    <td>Sort buffer size:</td>
+                                    <td><?= human_readable($sortBufferSize) ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Read rnd buffer size:</td>
+                                    <td><?= human_readable($readRndBufferSize) ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Sort merge passes:</td>
+                                    <td><?= $sortMergePasses ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Passes per sort:</td>
+                                    <td><?= $passesPerSort ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Total sorts:</td>
+                                    <td><?= $totalSorts ?></td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                    <table class='table table-sm'>
+                        <tr>
+                            <th>Variable name</th>
+                            <th>Default value</th>
+                            <th>Current value</th>
+                        </tr>
+                        <tr>
+                            <td><samp>sort_buffer_size</samp></td>
+                            <td>2 M</span></td>
+                            <td><?= human_readable($sortBufferSize) ?></td>
+                        </tr>
+                        <tr>
+                            <td><samp>read_rnd_buffer_size</samp></td>
+                            <td>262144 <span class='text-muted'>(256 KB)</span></td>
+                            <td><?= $readRndBufferSize ?> (<?= human_readable($readRndBufferSize) ?>)</td>
+                        </tr>
+                    </table>
+                    <?php
+                    if ($totalSorts == 0) {
+                        ?>
+                        <div class="alert alert-info" role="alert">
+                            No sort operations have been performed
+                        </div>
+                        <?php
+                    }
+                    ?>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class='row'>
+        <div class='col-sm-12'>
+            <div class='card'>
+                <div class='card-header'>
+                    Joins
+                </div>
+                <div class='card-body'>
+                    <div class='row'>
+                        <div class='col-sm-8'>
+                        </div>
+                        <div class='col-sm-4'>
+                            <table class='table table-sm'>
+                                <tr>
+                                    <td>Join buffer size:</td>
+                                    <td><?= human_readable($joinBufferSize) ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Select full join:</td>
+                                    <td><?= $selectFullJoin ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Select range check:</td>
+                                    <td><?= $selectRangeCheck ?></td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                    <table class='table table-sm'>
+                        <tr>
+                            <th>Variable name</th>
+                            <th>Default value</th>
+                            <th>Current value</th>
+                        </tr>
+                        <tr>
+                            <td><samp>join_buffer_size</samp></td>
+                            <td>262144 (256 KB)</td>
+                            <td><?= human_readable($joinBufferSize) ?> (<?= human_readable($joinBufferSize) ?>)</td>
+                        </tr>
+                    </table>
+                    <?php
+                    if ($selectRangeCheck == 0 && $selectFullJoin == 0) {
+                        ?>
+                        <div class="alert alert-success" role="alert">
+                            Your joins seem to be using indexes properly
+                        </div>
+                        <?php
+                    }
+                    if ($selectFullJoin > 0 || $selectRangeCheck > 0) {
+                        ?>
+                        <div class="alert alert-danger" role="alert">
+                            You should enable "log-queries-not-using-indexes" and look for non indexed joins in the slow
+                            query log.
+                        </div>
+                        <?php
+                        if ($raiseJoinBuffer) {
+                            ?>
+                            <div class="alert alert-info" role="alert">
+                                If you are unable to optimize your queries you may want to increase your
+                                join_buffer_size to
+                                accomodate larger joins in one pass.
+                            </div>
+                            <?php
+                        }
+                    }
+                    if ($joinBufferSize >= 4 * 1024 * 1024) {
+                        ?>
+                        <div class="alert alert-danger" role="alert">
+                            It is not advised to have more than 4 M join_buffer_size.
+                        </div>
+                        <?php
+                    }
+                    ?>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class='row'>
+        <div class='col-sm-12'>
+            <div class='card'>
+                <div class='card-header'>
+                    Open files limit
+                </div>
+                <div class='card-body'>
+                    <div class='row'>
+                        <div class='col-sm-8'>
+                            <p> The number of file descriptors available to MariaDB. If you are getting the Too many
+                                open files error, then you should increase this limit.</p>
+                            <p>If set to 0, then MariaDB will calculate a limit based on the following:</p>
+                            <p>MAX(max_connections * 5, max_connections + table_open_cache * 2)</p>
+                        </div>
+                        <div class='col-sm-4'>
+                            <table class='table table-sm'>
+                                <tr>
+                                    <td>Open files limit:</td>
+                                    <td><?= $openFilesLimit ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Open files:</td>
+                                    <td><?= $openFiles ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Open files ratio:</td>
+                                    <td><?= round($openFilesRatio, 1) ?> %</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                    <table class='table table-sm'>
+                        <tr>
+                            <th>Variable name</th>
+                            <th>Default value</th>
+                            <th>Current value</th>
+                        </tr>
+                        <tr>
+                            <td><samp>open_files_limit</samp></td>
+                            <td><em>Autosized</em></td>
+                            <td><?= $openFilesLimit ?></td>
+                        </tr>
+                    </table>
+                    <?php
+                    if ($openFilesRatio >= 75) {
+                        ?>
+                        <div class="alert alert-danger" role="alert">
+                            You currently have open more than 75% of your open_file_limit.
+                        </div>
+                        <?php
+                    }
+                    else {
+                        ?>
+                        <div class="alert alert-success" role="alert">
+                            Your open_files_limit value seems to be fine.
+                        </div>
+                        <?php
 
-                if ($tmpDiskTables >= 25) {
+                    }
                     ?>
-                    <div class="alert alert-danger" role="alert">
-                        Perhaps you should increase your tmp_table_size and/or max_heap_table_size to reduce the number
-                        of disk-based temperary tables.<br>
-                        Note! BLOB and TEXT colums are now allowed in memory tables. If you are using there columns
-                        raising these values might not impact your ratio of on disk temp tables.
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class='row'>
+        <div class='col-sm-12'>
+            <div class='card'>
+                <div class='card-header'>
+                    Table cache
+                </div>
+                <div class='card-body'>
+                    <div class='row'>
+                        <div class='col-sm-8'>
+                        </div>
+                        <div class='col-sm-4'>
+                            <table class='table table-sm'>
+                                <tr>
+                                    <td>Table count:</td>
+                                    <td><?= $tableCount ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Table cache:</td>
+                                    <td><?= $openTables ?> of <?= $tableOpenCache ?><br><?= round($tableCacheFill, 1) ?>
+                                        %
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>Definition cache:</td>
+                                    <td><?= $openTableDefinitions ?> of <?= $tableDefinitionCache ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Table cache hit rate:</td>
+                                    <td><?= round($tableCacheHitRate, 2) ?> %</td>
+                                </tr>
+                                <tr>
+                                    <td>Opened tables:</td>
+                                    <td><?= $openedTables ?></td>
+                                </tr>
+                            </table>
+                        </div>
                     </div>
+                    <table class='table table-sm'>
+                        <tr>
+                            <th>Variable name</th>
+                            <th>Default value</th>
+                            <th>Current value</th>
+                        </tr>
+                        <tr>
+                            <td><samp>table_open_cache</samp></td>
+                            <td>2000</td>
+                            <td><?= $tableOpenCache ?></td>
+                        </tr>
+                        <tr>
+                            <td><samp>table_definition_cache</samp></td>
+                            <td>400</td>
+                            <td><?= $tableDefinitionCache ?></td>
+                        </tr>
+                    </table>
                     <?php
-                }
-                else {
+                    if ($tableCacheError) {
+                        ?>
+                        <div class="alert alert-danger" role="alert">
+                            No table cache?!
+                        </div>
+                        <?php
+                    }
+
+                    if ($tableCacheFill < 95) {
+                        ?>
+                        <div class="alert alert-success" role="alert">
+                            Your table_cache value seems to be fine
+                        </div>
+                        <?php
+                    }
+                    elseif ($tableCacheHitRate <= 85 || $tableCacheFill >= 95) {
+                        ?>
+                        <div class="alert alert-danger" role="alert">
+                            You should probably increase your table_cache
+                        </div>
+                        <?php
+                    }
+                    else {
+                        ?>
+                        <div class="alert alert-success" role="alert">
+                            Your table_cache value seems to be fine.
+                        </div>
+                        <?php
+                    }
                     ?>
-                    <div class="alert alert-success" role="alert">
-                        Your temporary tables ratio to be fine.
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class='row'>
+        <div class='col-sm-12'>
+            <div class='card'>
+                <div class='card-header'>
+                    Temp tables
+                </div>
+                <div class='card-body'>
+                    <div class='row'>
+                        <div class='col-sm-8'>
+                        </div>
+                        <div class='col-sm-4'>
+                            <table class='table table-sm'>
+                                <tr>
+                                    <td>Max heap table size:</td>
+                                    <td><?= human_readable($maxHeapTableSize) ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Tmp table size:</td>
+                                    <td><?= human_readable($tmpTableSize) ?></td>
+                                </tr>
+                            </table>
+                        </div>
                     </div>
+                    <p>Created tmp tables: <?= $createdTmpTables ?></p>
+                    <p>Created tmp disk tables: <?= $createdTmpDiskTables ?></p>
+                    <p>Tmp disk tables: <?= round($tmpDiskTables, 1) ?></p>
                     <?php
-                }
-                ?>
+                    if ($tmpTableSize > $maxHeapTableSize) {
+                        ?>
+                        <div class="alert alert-warning" role="alert">
+                            Effective in-memory tmp_table_size is limited to max_heap_table_size.
+                        </div>
+                        <?php
+                    }
+
+                    if ($tmpDiskTables >= 25) {
+                        ?>
+                        <div class="alert alert-danger" role="alert">
+                            Perhaps you should increase your tmp_table_size and/or max_heap_table_size to reduce the
+                            number
+                            of disk-based temperary tables.<br>
+                            Note! BLOB and TEXT colums are now allowed in memory tables. If you are using there columns
+                            raising these values might not impact your ratio of on disk temp tables.
+                        </div>
+                        <?php
+                    }
+                    else {
+                        ?>
+                        <div class="alert alert-success" role="alert">
+                            Your temporary tables ratio to be fine.
+                        </div>
+                        <?php
+                    }
+                    ?>
+                </div>
             </div>
         </div>
     </div>
