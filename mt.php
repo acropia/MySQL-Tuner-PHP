@@ -1,16 +1,18 @@
 <?php
-$physicalMemory = 4 * 1024 * 1024 * 1024;
+/* MySQL-Tuner-PHP - Version 0.3
+ */
+$physicalMemory = 8 * 1024 * 1024 * 1024;
 $preferredQueryTime = 5;
 
-function human_readable($number) {
+function human_readable_bytes($number) {
     if ($number >= 1024 * 1024 * 1024) {
-        return round($number / (1024 * 1024 * 1024), 2) . " G";
+        return round($number / (1024 * 1024 * 1024), 1) . " GB";
     }
     elseif ($number >= 1024 * 1024) {
-        return round($number / (1024 * 1024), 2) . " M";
+        return round($number / (1024 * 1024), 1) . " MB";
     }
     elseif ($number >= 1024) {
-        return round($number / (1024), 2) . " K";
+        return round($number / (1024), 1) . " KB";
     }
     else {
         return $number . " bytes";
@@ -29,6 +31,35 @@ function human_readable_comma_enum($string) {
     }
     $list .= "</ul>";
     return $list;
+}
+
+function percentage($value, $total = 0) {
+    if ($total == 0) return 100;
+    return ($value * 100 / $total);
+}
+
+function alert_check() {
+    return "<svg width=\"1em\" height=\"1em\" viewBox=\"0 0 16 16\" class=\"bi bi-check float-right mt-1 text-success\" fill=\"currentColor\" xmlns=\"http://www.w3.org/2000/svg\">\n"
+        . "<path fill-rule=\"evenodd\" d=\"M10.97 4.97a.75.75 0 0 1 1.071 1.05l-3.992 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425a.236.236 0 0 1 .02-.022z\"/>\n"
+        . "</svg>";
+}
+
+function alert_error() {
+    return "<svg width=\"1em\" height=\"1em\" viewBox=\"0 0 16 16\" class=\"bi bi-exclamation-octagon-fill float-right mt-1 text-danger\" fill=\"currentColor\" xmlns=\"http://www.w3.org/2000/svg\">\n"
+        . "<path fill-rule=\"evenodd\" d=\"M11.46.146A.5.5 0 0 0 11.107 0H4.893a.5.5 0 0 0-.353.146L.146 4.54A.5.5 0 0 0 0 4.893v6.214a.5.5 0 0 0 .146.353l4.394 4.394a.5.5 0 0 0 .353.146h6.214a.5.5 0 0 0 .353-.146l4.394-4.394a.5.5 0 0 0 .146-.353V4.893a.5.5 0 0 0-.146-.353L11.46.146zM8 4a.905.905 0 0 0-.9.995l.35 3.507a.552.552 0 0 0 1.1 0l.35-3.507A.905.905 0 0 0 8 4zm.002 6a1 1 0 1 0 0 2 1 1 0 0 0 0-2z\"/>\n"
+        . "</svg>";
+}
+
+function alert_info() {
+    return "<svg width=\"1em\" height=\"1em\" viewBox=\"0 0 16 16\" class=\"bi bi-info-circle-fill float-right mt-1 text-info\" fill=\"currentColor\" xmlns=\"http://www.w3.org/2000/svg\">\n"
+        . "<path fill-rule=\"evenodd\" d=\"M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm.93-9.412l-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533L8.93 6.588zM8 5.5a1 1 0 1 0 0-2 1 1 0 0 0 0 2z\"/>\n"
+        . "</svg>";
+}
+
+function alert_warning() {
+    return "<svg width=\"1.0625em\" height=\"1em\" viewBox=\"0 0 17 16\" class=\"bi bi-exclamation-triangle-fill float-right mt-1 text-warning\" fill=\"currentColor\" xmlns=\"http://www.w3.org/2000/svg\">\n"
+        . "<path fill-rule=\"evenodd\" d=\"M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5a.905.905 0 0 0-.9.995l.35 3.507a.552.552 0 0 0 1.1 0l.35-3.507A.905.905 0 0 0 8 5zm.002 6a1 1 0 1 0 0 2 1 1 0 0 0 0-2z\"/>\n"
+        . "</svg>";
 }
 
 $user = getenv("MTP_USER");
@@ -68,6 +99,20 @@ while ($row = $stmt->fetch()) {
     $globalVariables[$row['Variable_name']] = $row['Value'];
 }
 
+/* Engines */
+$engines = [];
+$stmt = $pdo->query('SELECT Engine, Support, Comment, Transactions, XA, Savepoints FROM information_schema.ENGINES ORDER BY Engine ASC');
+while ($row = $stmt->fetch()) {
+    $engines[$row['Engine']] = [
+        'Support' => $row['Support'],
+        'Comment' => $row['Comment'],
+        'Transactions' => $row['Transactions'],
+        'XA' => $row['XA'],
+        'Savepoints' => $row['Savepoints'],
+    ];
+}
+
+$logError = $globalVariables['log_error'];
 
 $questions = $globalStatus['Questions'];
 $uptime = $globalStatus['Uptime'];
@@ -159,13 +204,15 @@ $readRndBufferSize = $globalVariables['read_rnd_buffer_size'];
 $sortBufferSize = $globalVariables['sort_buffer_size'];
 $threadStack = $globalVariables['thread_stack'];
 $maxConnections = $globalVariables['max_connections'];
+$netBufferLength = $globalVariables['net_buffer_length'];
 $joinBufferSize = $globalVariables['join_buffer_size'];
 $tmpTableSize = $globalVariables['tmp_table_size'];
+$ariaPagecacheBufferSize = $globalVariables['aria_pagecache_buffer_size'];
 $maxHeapTableSize = $globalVariables['max_heap_table_size'];
 $logBin = $globalVariables['log_bin'];
 $maxUsedConnections = $globalStatus['Max_used_connections'];
 
-if ($logBin = "ON") {
+if ($logBin == "ON") {
     $binlogCacheSize = $globalVariables['binlog_cache_size'];
 }
 else {
@@ -178,9 +225,12 @@ else {
     $effectiveTmpTableSize = $tmpTableSize;
 }
 
-$perThreadBufferSize = $readBufferSize + $readRndBufferSize + $sortBufferSize + $threadStack + $joinBufferSize + $binlogCacheSize;
-$perThreadBuffers = ($readBufferSize + $readRndBufferSize + $sortBufferSize + $threadStack + $joinBufferSize + $binlogCacheSize) * $maxConnections;
-$perThreadMaxBuffers = ($readBufferSize + $readRndBufferSize + $sortBufferSize + $threadStack + $joinBufferSize + $binlogCacheSize) * $maxUsedConnections;
+$perThreadBufferSize = $readBufferSize + $readRndBufferSize + $sortBufferSize + $threadStack + $netBufferLength + $joinBufferSize + $binlogCacheSize;
+$perThreadBuffers = $perThreadBufferSize * $maxConnections;
+$perThreadMaxBuffers = $perThreadBufferSize * $maxUsedConnections;
+
+$tmpTableSize = $globalVariables['tmp_table_size'];
+$maxHeapTableSize = $globalVariables['max_heap_table_size'];
 
 $innodbBufferPoolSize = $globalVariables['innodb_buffer_pool_size'];
 if (empty($innodbBufferPoolSize)) $innodbBufferPoolSize = 0;
@@ -196,7 +246,7 @@ $keyBufferSize = $globalVariables['key_buffer_size'];
 $queryCacheSize = $globalVariables['query_cache_size'];
 if (empty($queryCacheSize)) $queryCacheSize = 0;
 
-$globalBufferSize = $innodbBufferPoolSize + $innodbAdditionalMemPoolSize + $innodbLogBufferSize + $keyBufferSize + $queryCacheSize;
+$globalBufferSize = $tmpTableSize + $innodbBufferPoolSize + $innodbAdditionalMemPoolSize + $innodbLogBufferSize + $keyBufferSize + $queryCacheSize + $ariaPagecacheBufferSize;
 
 $maxMemory = $globalBufferSize + $perThreadMaxBuffers;
 $totalMemory = $globalBufferSize + $perThreadBuffers;
@@ -325,86 +375,163 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
           integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
     <title>MySQL-Tuner-PHP</title>
     <style>
-        .table-sm td {
+        body {
+            background-color: rgb(241, 244, 246);
+        }
+
+        .card-header {
+            background-color: white;
+            text-transform: uppercase;
+            color: rgba(13, 27, 62, 0.5);
+            font-weight: bold;
+        }
+
+        .table-sm th, .table-sm td {
             font-size: .9em;
             padding: 1px;
+        }
+
+        .container .row + .row {
+            margin-bottom: 1em;
         }
     </style>
 </head>
 <body>
 <div class='container'>
-    <nav class="navbar navbar-expand-lg navbar-light bg-light">
-        <a class="navbar-brand" href="#">MySQL-Tuner-PHP</a>
-        <div class="navbar-collapse" id="navbarSupportedContent">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm">
+        <a class="navbar-brand" href="#">
+            <svg width="1em" height="1em" viewBox="0 0 16 16" class="bi bi-calculator text-warning" fill="currentColor"
+                 xmlns="http://www.w3.org/2000/svg">
+                <path fill-rule="evenodd"
+                      d="M12 1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1zM4 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H4z"/>
+                <path d="M4 2.5a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.5.5h-7a.5.5 0 0 1-.5-.5v-2zm0 4a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1zm0 3a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1zm0 3a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1zm3-6a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1zm0 3a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1zm0 3a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1zm3-6a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1zm0 3a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v4a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-4z"/>
+            </svg>
+            MySQL-Tuner-PHP <small>0.3</small></a>
+        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarSupportedContent"
+                aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="navbarSupportedContent">
             <ul class="navbar-nav mr-auto">
-                <li class="nav-item">
-                    <a class="nav-link" href="#">Slow queries</a>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" id="navbarMisc" role="button" data-toggle="dropdown"
+                       aria-haspopup="true" aria-expanded="false">
+                        Misc
+                    </a>
+                    <div class="dropdown-menu" aria-labelledby="navbarMisc">
+                        <a class="dropdown-item" href="#slow_queries">Slow queries</a>
+                        <a class="dropdown-item" href="#binary_log">Binary log</a>
+                        <a class="dropdown-item" href="#threads">Threads</a>
+                        <a class="dropdown-item" href="#used_connections">Used connections</a>
+                        <a class="dropdown-item" href="#innodb">InnoDB</a>
+                    </div>
+                </li>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" id="navbarMemory" role="button" data-toggle="dropdown"
+                       aria-haspopup="true" aria-expanded="false">
+                        Memory
+                    </a>
+                    <div class="dropdown-menu" aria-labelledby="navbarMemory">
+                        <a class="dropdown-item" href="#memory_usage">Memory used</a>
+                        <a class="dropdown-item" href="#key_buffer">Key buffer</a>
+                        <a class="dropdown-item" href="#query_cache">Query cache</a>
+                        <a class="dropdown-item" href="#sort_operations">Sort operations</a>
+                        <a class="dropdown-item" href="#join_operations">Join operations</a>
+                    </div>
+                </li>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" id="navbarFile" role="button" data-toggle="dropdown"
+                       aria-haspopup="true" aria-expanded="false">
+                        File
+                    </a>
+                    <div class="dropdown-menu" aria-labelledby="navbarFile">
+                        <a class="dropdown-item" href="#open_files">Open files</a>
+                        <a class="dropdown-item" href="#table_cache">Table cache</a>
+                        <a class="dropdown-item" href="#temp_tables">Temp. tables</a>
+                        <a class="dropdown-item" href="#table_scans">Table scans</a>
+                        <a class="dropdown-item" href="#table_locking">Table locking</a>
+                    </div>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="#">Binary log</a>
+                    <a class="nav-link" href="#status_variables">Status vars</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="#">Threads</a>
+                    <a class="nav-link" href="#system_variables">System vars</a>
                 </li>
             </ul>
         </div>
     </nav>
     <div class='row'>
-        <div class='col-sm'>
-            <table class='table table-sm'>
-                <tr>
-                    <td>Host:</td>
-                    <td><?= $host ?></td>
-                </tr>
-                <tr>
-                    <td>User:</td>
-                    <td><?= $user ?></td>
-                </tr>
-            </table>
-        </div>
-        <div class='col-sm'>
-            <table class='table table-sm'>
-                <tr>
-                    <td>Server version:</td>
-                    <td><?= $version ?></td>
-                </tr>
-                <tr>
-                    <td>Major version:</td>
-                    <td><?= $majorVersion ?></td>
-                </tr>
-                <tr>
-                    <td>Data dir:</td>
-                    <td><?= $dataDir ?></td>
-                </tr>
-                <tr>
-                    <td>Compile machine:</td>
-                    <td><?= $versionCompileMachine ?></td>
-                </tr>
-            </table>
-        </div>
-        <div class='col-sm'>
-            <table class='table table-sm'>
-                <tr>
-                    <td>Uptime:</td>
-                    <td><?= $uptime ?> seconds</td>
-                </tr>
-                <tr>
-                    <td>&nbsp;</td>
-                    <td><?= human_readable_time($uptime) ?></td>
-                </tr>
-                <tr>
-                    <td>Questions:</td>
-                    <td><?= $questions ?></td>
-                </tr>
-                <tr>
-                    <td>Avg. qps:</td>
-                    <td><?= round($avgQps, 1) ?></td>
-                </tr>
-                <tr>
-                    <td>Threads connected:</td>
-                    <td><?= $threadsConnected ?></td>
-                </tr>
-            </table>
+        <div class='col-sm-12'>
+            <div class='card border-0 shadow-sm'>
+                <div class='card-body'>
+                    <div class='row'>
+                        <div class='col-sm-4'>
+                            <table class='table table-sm'>
+                                <tr>
+                                    <td>Host:</td>
+                                    <td><?= $host ?></td>
+                                </tr>
+                                <tr>
+                                    <td>User:</td>
+                                    <td><?= $user ?></td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                    <div class='row'>
+                        <div class='col-sm-6'>
+                            <table class='table table-sm'>
+                                <tr>
+                                    <td>Server version:</td>
+                                    <td><?= $version ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Major version:</td>
+                                    <td><?= $majorVersion ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Compile machine:</td>
+                                    <td><?= $versionCompileMachine ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Data dir:</td>
+                                    <td><samp><?= $dataDir ?></samp></td>
+                                </tr>
+                                <tr>
+                                    <td>Error log:</td>
+                                    <td><samp><?= $logError ?></samp></td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div class='col-sm-6'>
+                            <table class='table table-sm'>
+                                <tr>
+                                    <td>Uptime:</td>
+                                    <td><?= $uptime ?> seconds</td>
+                                </tr>
+                                <tr>
+                                    <td>&nbsp;</td>
+                                    <td><?= human_readable_time($uptime) ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Questions:</td>
+                                    <td><?= $questions ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Avg. qps:</td>
+                                    <td><?= round($avgQps, 1) ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Threads connected:</td>
+                                    <td><?= $threadsConnected ?></td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
     <div class='row'>
@@ -419,8 +546,43 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
         ?>
     </div>
     <div class='row'>
+        <a id='engines'></a>
         <div class='col-sm-12'>
-            <div class='card'>
+            <div class='card border-0 shadow-sm'>
+                <div class='card-header'>Database engines</div>
+                <div class='card-body'>
+                    <table class='table table-sm'>
+                        <tr>
+                            <th>Engine</th>
+                            <th>Support</th>
+                            <th>Comment</th>
+                            <th>Transactions</th>
+                            <th>XA</th>
+                            <th>Savepoints</th>
+                        </tr>
+                        <?php
+                        foreach ($engines as $engineName=>$engineConfig) {
+                        ?>
+                        <tr>
+                            <td><?= $engineName ?></td>
+                            <td><?= $engineConfig['Support'] ?></td>
+                            <td><?= $engineConfig['Comment'] ?></td>
+                            <td><?= $engineConfig['Transactions'] ?></td>
+                            <td><?= $engineConfig['XA'] ?></td>
+                            <td><?= $engineConfig['Savepoints'] ?></td>
+                        </tr>
+                        <?php
+                        }
+                        ?>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class='row'>
+        <a id='slow_queries'></a>
+        <div class='col-sm-12'>
+            <div class='card border-0 shadow-sm'>
                 <div class='card-header'>Slow queries</div>
                 <div class='card-body'>
                     <div class='row'>
@@ -439,25 +601,12 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                                 <tr>
                                     <td>Slow query log:</td>
                                     <td><?= $slowQueryLog ?>
-
                                         <?php
                                         if ($slowQueryLog == "ON") {
-                                            ?>
-                                            <div class="alert alert-success" role="alert">
-                                                Slow query log is enabled!
-                                            </div>
-                                            <?php
+                                            echo alert_check();
                                         }
                                         elseif ($slowQueryLog == "OFF" or empty($slowQueryLog)) {
-                                            ?>
-                                            <svg width="1.0625em" height="1em" viewBox="0 0 17 16"
-                                                 class="bi bi-exclamation-triangle-fill" fill="orange"
-                                                 xmlns="http://www.w3.org/2000/svg">
-                                                <path fill-rule="evenodd"
-                                                      d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5a.905.905 0 0 0-.9.995l.35 3.507a.552.552 0 0 0 1.1 0l.35-3.507A.905.905 0 0 0 8 5zm.002 6a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/>
-                                            </svg>
-                                            <span class="badge badge-warning float-right">Warning</span>
-                                            <?php
+                                            echo alert_warning();
                                         }
                                         ?>
                                     </td>
@@ -468,20 +617,21 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                                 </tr>
                                 <tr>
                                     <td>Long query time:</td>
-                                    <td><?= round($longQueryTime) ?> sec.</td>
+                                    <td><?= round($longQueryTime) ?>
+                                        sec.<?= ($longQueryTime > $preferredQueryTime) ? alert_info() : '' ?></td>
                                 </tr>
                             </table>
                         </div>
                     </div>
                     <table class='table table-sm'>
                         <tr>
-                            <th>Variable name</th>
-                            <th>Default value</th>
-                            <th>Current value</th>
+                            <th style='width: 30%'>Variable name</th>
+                            <th style='width: 35%'>Default value</th>
+                            <th style='width: 35%'>Current value</th>
                         </tr>
                         <tr>
                             <td><samp>slow_query_log</samp></td>
-                            <td>0 (= disabled)</td>
+                            <td>0</td>
                             <td><?= $slowQueryLog ?></td>
                         </tr>
                         <tr>
@@ -506,7 +656,8 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                         </tr>
                         <tr>
                             <td><samp>log_slow_admin_statements</samp></td>
-                            <td>ON (>= MariaDB 10.2.4)<br>OFF (<= MariaDB 10.2.3)</td>
+                            <td>ON <span class='text-muted'>(>= MariaDB 10.2.4)</span><br>OFF <span class='text-muted'>(<= MariaDB 10.2.3)</span>
+                            </td>
                             <td><?= $logSlowAdminStatements ?></td>
                         </tr>
                         <tr>
@@ -535,11 +686,18 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                             <td><?= human_readable_comma_enum($logSlowFilter) ?></td>
                         </tr>
                     </table>
-                    <h3>Recommendations</h3>
                     <?php
-                    if ($longQueryTime > $preferredQueryTime) {
+                    if ($slowQueryLog == "OFF" or empty($slowQueryLog)) {
                         ?>
                         <div class="alert alert-warning" role="alert">
+                            Your Slow Query Log is NOT enabled. Enable the Slow Query Log to examine slow queries which
+                            execution time exceeds the value of <samp>long_query_time</samp>.
+                        </div>
+                        <?php
+                    }
+                    if ($longQueryTime > $preferredQueryTime) {
+                        ?>
+                        <div class="alert alert-info" role="alert">
                             Configure <samp>long_query_time</samp> to a lower value, to investigate your slow queries
                             even better. Recommendation: <?= $preferredQueryTime ?> sec.
                         </div>
@@ -548,7 +706,7 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                     elseif (round($longQueryTime) == 0) {
                         ?>
                         <div class="alert alert-warning" role="alert">
-                            Configure <samp>long_query_time</samp> to a high value. The current setting of zero, will
+                            Configure <samp>long_query_time</samp> to a higher value. The current setting of zero, will
                             cause ALL queries to be logged! If you actually want to log all queries, use the query log,
                             not the slow query log.
                         </div>
@@ -560,11 +718,10 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
         </div>
     </div>
     <div class='row'>
+        <a id='binary_log'></a>
         <div class='col-sm-12'>
-            <div class='card'>
-                <div class='card-header'>
-                    Binary log
-                </div>
+            <div class='card border-0 shadow-sm'>
+                <div class='card-header'>Binary log</div>
                 <div class='card-body'>
                     <div class='row'>
                         <div class='col-sm-8'>
@@ -579,11 +736,12 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                             <table class='table table-sm'>
                                 <tr>
                                     <td>Log bin:</td>
-                                    <td><?= $logBin ?></td>
+                                    <td><?= $logBin;
+                                        echo ($logBin == "ON") ? alert_check() : alert_error(); ?></td>
                                 </tr>
                                 <tr>
                                     <td>Max binlog size:</td>
-                                    <td><?= human_readable($maxBinlogSize) ?></td>
+                                    <td><?= human_readable_bytes($maxBinlogSize) ?></td>
                                 </tr>
                                 <tr>
                                     <td>Expire logs days:</td>
@@ -598,9 +756,9 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                     </div>
                     <table class='table table-sm'>
                         <tr>
-                            <th>Variable name</th>
-                            <th>Default value</th>
-                            <th>Current value</th>
+                            <th style='width: 30%'>Variable name</th>
+                            <th style='width: 35%'>Default value</th>
+                            <th style='width: 35%'>Current value</th>
                         </tr>
                         <tr>
                             <td><samp>log_bin</samp></td>
@@ -609,8 +767,9 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                         </tr>
                         <tr>
                             <td><samp>max_binlog_size</samp></td>
-                            <td>1073741824</td>
-                            <td><?= $maxBinlogSize ?></td>
+                            <td>1073741824 <span class='text-muted'>(1 GB)</span></td>
+                            <td><?= $maxBinlogSize ?> <span
+                                        class='text-muted'>(<?= human_readable_bytes($maxBinlogSize) ?>)</span></td>
                         </tr>
                         <tr>
                             <td><samp>expire_logs_days</samp></td>
@@ -624,14 +783,7 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                         </tr>
                     </table>
                     <?php
-                    if ($logBin == "ON") {
-                        ?>
-                        <div class="alert alert-success" role="alert">
-                            The binary log is enabled!
-                        </div>
-                        <?php
-                    }
-                    else {
+                    if ($logBin != "ON") {
                         ?>
                         <div class="alert alert-danger" role="alert">
                             The binary log is not enabled.
@@ -644,11 +796,10 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
         </div>
     </div>
     <div class='row'>
+        <a id='threads'></a>
         <div class='col-sm-12'>
-            <div class='card'>
-                <div class='card-header'>
-                    Threads
-                </div>
+            <div class='card border-0 shadow-sm'>
+                <div class='card-header'>Threads</div>
                 <div class='card-body'>
                     <div class='row'>
                         <div class='col-sm-8'>
@@ -677,16 +828,16 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                                 </tr>
                                 <tr>
                                     <td>Threads per sec. avg.:</td>
-                                    <td><?= round($historicThreadsPerSec, 4) ?></td>
+                                    <td><?= round($historicThreadsPerSec, 2) ?></td>
                                 </tr>
                             </table>
                         </div>
                     </div>
                     <table class='table table-sm'>
                         <tr>
-                            <th>Variable name</th>
-                            <th>Default value</th>
-                            <th>Current value</th>
+                            <th style='width: 30%'>Variable name</th>
+                            <th style='width: 35%'>Default value</th>
+                            <th style='width: 35%'>Current value</th>
                         </tr>
                         <tr>
                             <td><samp>thread_handling</samp></td>
@@ -695,7 +846,8 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                         </tr>
                         <tr>
                             <td><samp>thread_cache_size</samp></td>
-                            <td>0 (<= MariaDB 10.1),<br>256 (from MariaDB 10.2.0)</td>
+                            <td>0 <span class='text-muted'>(<= MariaDB 10.1)</span><br>256 <span class='text-muted'>(from MariaDB 10.2.0)</span>
+                            </td>
                             <td><?= $threadCacheSize ?></td>
                         </tr>
                     </table>
@@ -720,11 +872,10 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
         </div>
     </div>
     <div class='row'>
+        <a id='used_connections'></a>
         <div class='col-sm-12'>
-            <div class='card'>
-                <div class='card-header'>
-                    Used connections
-                </div>
+            <div class='card border-0 shadow-sm'>
+                <div class='card-header'>Used connections</div>
                 <div class='card-body'>
                     <div class='row'>
                         <div class='col-sm-8'>
@@ -750,6 +901,18 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                             </table>
                         </div>
                     </div>
+                    <table class='table table-sm'>
+                        <tr>
+                            <th style='width: 30%'>Variable name</th>
+                            <th style='width: 35%'>Default value</th>
+                            <th style='width: 35%'>Current value</th>
+                        </tr>
+                        <tr>
+                            <td><samp>max_connections</samp></td>
+                            <td>151</td>
+                            <td><?= $maxConnections ?></td>
+                        </tr>
+                    </table>
                     <?php
                     if ($connectionsRatio > 85) {
                         ?>
@@ -780,11 +943,10 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
         </div>
     </div>
     <div class='row'>
+        <a id='innodb'></a>
         <div class='col-sm-12'>
-            <div class='card'>
-                <div class='card-header'>
-                    InnoDB
-                </div>
+            <div class='card border-0 shadow-sm'>
+                <div class='card-header'>InnoDB</div>
                 <div class='card-body'>
                     <div class='row'>
                         <div class='col-sm-8'>
@@ -807,25 +969,25 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                             <table class='table table-sm'>
                                 <tr>
                                     <td>Index space:</td>
-                                    <td><?= human_readable($innodbIndexLength) ?></td>
+                                    <td><?= human_readable_bytes($innodbIndexLength) ?></td>
                                 </tr>
                                 <tr>
                                     <td>Data space:</td>
-                                    <td><?= human_readable($innodbDataLength) ?></td>
+                                    <td><?= human_readable_bytes($innodbDataLength) ?></td>
                                 </tr>
                                 <tr>
                                     <td>Data read / written:</td>
-                                    <td><?= human_readable($innodbDataRead) ?>
-                                        / <?= human_readable($innodbDataWritten) ?></td>
+                                    <td><?= human_readable_bytes($innodbDataRead) ?>
+                                        / <?= human_readable_bytes($innodbDataWritten) ?></td>
                                 </tr>
                                 <tr>
                                     <td>Data reads / writes:</td>
-                                    <td><?= human_readable($innodbDataReads) ?>
-                                        / <?= human_readable($innodbDataWrites) ?></td>
+                                    <td><?= $innodbDataReads ?>
+                                        / <?= $innodbDataWrites ?></td>
                                 </tr>
                                 <tr>
                                     <td>Buffer pool size:</td>
-                                    <td><?= human_readable($innodbBufferPoolSize) ?></td>
+                                    <td><?= human_readable_bytes($innodbBufferPoolSize) ?></td>
                                 </tr>
                                 <tr>
                                     <td>Buffer pool free pct.:</td>
@@ -833,11 +995,11 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                                 </tr>
                                 <tr>
                                     <td>Buffer pool bytes data:</td>
-                                    <td><?= human_readable($innodbBufferPoolBytesData) ?></td>
+                                    <td><?= human_readable_bytes($innodbBufferPoolBytesData) ?></td>
                                 </tr>
                                 <tr>
                                     <td>Buffer pool bytes dirty:</td>
-                                    <td><?= human_readable($innodbBufferPoolBytesDirty) ?></td>
+                                    <td><?= human_readable_bytes($innodbBufferPoolBytesDirty) ?></td>
                                 </tr>
                                 <tr>
                                     <td>Buffer pool read requests:</td>
@@ -868,14 +1030,14 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                     </div>
                     <table class='table table-sm'>
                         <tr>
-                            <th>Variable name</th>
-                            <th>Default value</th>
-                            <th>Current value</th>
+                            <th style='width: 30%'>Variable name</th>
+                            <th style='width: 35%'>Default value</th>
+                            <th style='width: 35%'>Current value</th>
                         </tr>
                         <tr>
                             <td><samp>innodb_buffer_pool_size</samp></td>
                             <td>134217728 (128 MB)</td>
-                            <td><?= $innodbBufferPoolSize ?> (<?= human_readable($innodbBufferPoolSize) ?>)</td>
+                            <td><?= $innodbBufferPoolSize ?> (<?= human_readable_bytes($innodbBufferPoolSize) ?>)</td>
                         </tr>
                         <tr>
                             <td><samp>innodb_fast_shutdown</samp></td>
@@ -895,12 +1057,12 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                         <tr>
                             <td><samp>innodb_log_buffer_size</samp></td>
                             <td>16777216 (16MB) >= MariaDB 10.1.9<br>8388608 (8MB) <= MariaDB 10.1.8</td>
-                            <td><?= $innodbLogBufferSize ?> (<?= human_readable($innodbLogBufferSize) ?>)</td>
+                            <td><?= $innodbLogBufferSize ?> (<?= human_readable_bytes($innodbLogBufferSize) ?>)</td>
                         </tr>
                         <tr>
                             <td><samp>innodb_log_file_size</samp></td>
                             <td>100663296 (96MB) (>= MariaDB 10.5)<br>50331648 (48MB) (<= MariaDB 10.4)</td>
-                            <td><?= $innodbLogFileSize ?> (<?= human_readable($innodbLogFileSize) ?>)</td>
+                            <td><?= $innodbLogFileSize ?> (<?= human_readable_bytes($innodbLogFileSize) ?>)</td>
                         </tr>
                         <tr>
                             <td><samp>innodb_log_files_in_group</samp></td>
@@ -913,11 +1075,10 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
         </div>
     </div>
     <div class='row'>
+        <a id='memory_usage'></a>
         <div class='col-sm-12'>
-            <div class='card'>
-                <div class='card-header'>
-                    Memory usage
-                </div>
+            <div class='card border-0 shadow-sm'>
+                <div class='card-header'>Memory usage</div>
                 <div class='card-body'>
                     <div class='row'>
                         <div class='col-sm-8'>
@@ -926,23 +1087,23 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                             <table class='table table-sm'>
                                 <tr>
                                     <td>Physical Memory:</td>
-                                    <td><?= human_readable($physicalMemory); ?></td>
+                                    <td><?= human_readable_bytes($physicalMemory); ?></td>
                                 </tr>
                                 <tr>
                                     <td>Global buffer size:</td>
-                                    <td><?= human_readable($globalBufferSize) ?></td>
+                                    <td><?= human_readable_bytes($globalBufferSize) ?></td>
                                 </tr>
                                 <tr>
                                     <td>Per-thread buffer size:</td>
-                                    <td><?= human_readable($perThreadBufferSize) ?></td>
+                                    <td><?= human_readable_bytes($perThreadBufferSize) ?></td>
                                 </tr>
                                 <tr>
                                     <td>Max theoretical memory:</td>
-                                    <td><?= human_readable($totalMemory) ?></td>
+                                    <td><?= human_readable_bytes($totalMemory) ?></td>
                                 </tr>
                                 <tr>
                                     <td>Max used memory:</td>
-                                    <td><?= human_readable($maxMemory) ?></td>
+                                    <td><?= human_readable_bytes($maxMemory) ?></td>
                                 </tr>
                                 <tr>
                                     <td>Pct of sys mem:</td>
@@ -956,6 +1117,11 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                             <h5>Global buffer size</h5>
                             <p>Calculation of the global available buffers in this server.</p>
                             <table class='table table-sm'>
+                                <tr>
+                                    <td>Tmp table size:</td>
+                                    <td align='right'><?= $tmpTableSize ?></td>
+                                    <td>+</td>
+                                </tr>
                                 <tr>
                                     <td>InnoDB buffer pool size:</td>
                                     <td align='right'><?= $innodbBufferPoolSize ?></td>
@@ -982,6 +1148,11 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                                     <td>+</td>
                                 </tr>
                                 <tr>
+                                    <td>Aria pagecache buffer size:</td>
+                                    <td align='right'><?= $ariaPagecacheBufferSize ?></td>
+                                    <td>+</td>
+                                </tr>
+                                <tr>
                                     <td><strong>Total global buffer size:</strong></td>
                                     <td align='right'><strong><?= $globalBufferSize ?></strong></td>
                                     <td>&nbsp;</td>
@@ -989,7 +1160,8 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                                 <tr>
                                     <td>&nbsp;</td>
                                     <td align='right'><span
-                                                class='text-muted'><?= human_readable($globalBufferSize) ?></span></td>
+                                                class='text-muted'><?= human_readable_bytes($globalBufferSize) ?></span>
+                                    </td>
                                     <td>&nbsp;</td>
                                 </tr>
                             </table>
@@ -1019,6 +1191,11 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                                     <td>+</td>
                                 </tr>
                                 <tr>
+                                    <td>Net buffer length:</td>
+                                    <td align='right'><?= $netBufferLength ?></td>
+                                    <td>+</td>
+                                </tr>
+                                <tr>
                                     <td>Join buffer size:</td>
                                     <td align='right'><?= $joinBufferSize ?></td>
                                     <td>+</td>
@@ -1036,7 +1213,7 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                                 <tr>
                                     <td>&nbsp;</td>
                                     <td align='right'><span
-                                                class='text-muted'><?= human_readable($perThreadBufferSize) ?></span>
+                                                class='text-muted'><?= human_readable_bytes($perThreadBufferSize) ?></span>
                                     </td>
                                     <td>&nbsp;</td>
                                 </tr>
@@ -1050,32 +1227,67 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                                 <tr>
                                     <td>Max connections:</td>
                                     <td align='right'><?= $maxConnections ?>
-                                        &times; <?= human_readable($perThreadBufferSize) ?> =
+                                        &times; <?= human_readable_bytes($perThreadBufferSize) ?> =
                                     </td>
-                                    <td align='right'><?= human_readable($perThreadBuffers) ?></td>
+                                    <td align='right'><?= human_readable_bytes($perThreadBuffers) ?></td>
                                 </tr>
                                 <tr>
                                     <td>Max used connections:</td>
                                     <td align='right'><?= $maxUsedConnections ?>
-                                        &times; <?= human_readable($perThreadBufferSize) ?> =
+                                        &times; <?= human_readable_bytes($perThreadBufferSize) ?> =
                                     </td>
-                                    <td align='right'><?= human_readable($perThreadMaxBuffers) ?></td>
+                                    <td align='right'><?= human_readable_bytes($perThreadMaxBuffers) ?></td>
                                 </tr>
                             </table>
                         </div>
                     </div>
+                    <table class='table table-sm'>
+                        <tr>
+                            <th style='width: 30%'>Variable name</th>
+                            <th style='width: 35%'>Default value</th>
+                            <th style='width: 35%'>Current value</th>
+                        </tr>
+                        <tr>
+                            <td><samp>aria_pagecache_buffer_size</samp></td>
+                            <td>134217720  <span class='text-muted'>(128 MB)</span></td>
+                            <td><?= $ariaPagecacheBufferSize ?> <span class='text-muted'>(<?= human_readable_bytes($ariaPagecacheBufferSize) ?>)</span></td>
+                        </tr>
+                        <tr>
+                            <td><samp>join_buffer_size</samp></td>
+                            <td>262144  <span class='text-muted'>(256 KB)</span></td>
+                            <td><?= $joinBufferSize ?> <span class='text-muted'>(<?= human_readable_bytes($joinBufferSize) ?>)</span></td>
+                        </tr>
+                        <tr>
+                            <td><samp>net_buffer_length</samp></td>
+                            <td>16384 <span class='text-muted'>(16 KB)</span></td>
+                            <td><?= $netBufferLength ?> <span class='text-muted'>(<?= human_readable_bytes($netBufferLength) ?>)</span></td>
+                        </tr>
+                        <tr>
+                            <td><samp>read_buffer_size</samp></td>
+                            <td>131072 <span class='text-muted'>(128 KB)</span></td>
+                            <td><?= $readBufferSize ?> <span class='text-muted'>(<?= human_readable_bytes($readBufferSize) ?>)</span></td>
+                        </tr>
+                        <tr>
+                            <td><samp>read_rnd_buffer_size</samp></td>
+                            <td>262144 <span class='text-muted'>(256 KB)</span></td>
+                            <td><?= $readRndBufferSize ?> <span class='text-muted'>(<?= human_readable_bytes($readRndBufferSize) ?>)</span></td>
+                        </tr>
+                        <tr>
+                            <td><samp>sort_buffer_size</samp></td>
+                            <td> <span class='text-muted'>(2 MB)</span></td>
+                            <td><?= $sortBufferSize ?> <span class='text-muted'>(<?= human_readable_bytes($sortBufferSize) ?>)</span></td>
+                        </tr>
+                        <tr>
+                            <td><samp>thread_stack</samp></td>
+                            <td>299008 <span class='text-muted'>(<?= human_readable_bytes(299008) ?>)</span></td>
+                            <td><?= $threadStack ?> <span class='text-muted'>(<?= human_readable_bytes($threadStack) ?>)</span></td>
+                        </tr>
+                    </table>
                     <?php
                     if ($pctOfSysMem > 90) {
                         ?>
                         <div class="alert alert-danger" role="alert">
                             Max memory limit exceeds 90% of physical memory
-                        </div>
-                        <?php
-                    }
-                    else {
-                        ?>
-                        <div class="alert alert-success" role="alert">
-                            Max memory limit seem to be within acceptable norms
                         </div>
                         <?php
                     }
@@ -1085,11 +1297,10 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
         </div>
     </div>
     <div class='row'>
+        <a id='key_buffer'></a>
         <div class='col-sm-12'>
-            <div class='card'>
-                <div class='card-header'>
-                    Key buffer
-                </div>
+            <div class='card border-0 shadow-sm'>
+                <div class='card-header'>Key buffer</div>
                 <div class='card-body'>
                     <div class='row'>
                         <div class='col-sm-8'>
@@ -1104,18 +1315,18 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                             <table class='table table-sm'>
                                 <tr>
                                     <td>MyISAM Index Size:</td>
-                                    <td><?= human_readable($myisamIndexLength) ?></td>
+                                    <td><?= human_readable_bytes($myisamIndexLength) ?></td>
                                 </tr>
                                 <tr>
                                     <td>Key buffer size:</td>
-                                    <td><?= human_readable($keyBufferSize) ?></td>
+                                    <td><?= human_readable_bytes($keyBufferSize) ?></td>
                                 </tr>
                                 <tr>
                                     <td>Key cache miss rate is:</td>
                                     <td>1 : <?= round($keyCacheMissRate) ?></td>
                                 </tr>
                                 <tr>
-                                    <td>Key buffer free ratio:</td>
+                                    <td>Key buffer usage:</td>
                                     <td><?= round($keyBufferFree) ?> %</td>
                                 </tr>
                             </table>
@@ -1123,21 +1334,21 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                     </div>
                     <table class='table table-sm'>
                         <tr>
-                            <th>Variable name</th>
-                            <th>Default value</th>
-                            <th>Current value</th>
+                            <th style='width: 30%'>Variable name</th>
+                            <th style='width: 35%'>Default value</th>
+                            <th style='width: 35%'>Current value</th>
                         </tr>
                         <tr>
                             <td><samp>key_buffer_size</samp></td>
                             <td>134217728 <span class='text-muted'>(128 MB)</span></td>
                             <td><?= $keyBufferSize ?> <span
-                                        class='text-muted'>(<?= human_readable($keyBufferSize) ?>)</span></td>
+                                        class='text-muted'>(<?= human_readable_bytes($keyBufferSize) ?>)</span></td>
                         </tr>
                         <tr>
                             <td><samp>key_cache_block_size</samp></td>
                             <td>1024 <span class='text-muted'>(1 KB)</span></td>
                             <td><?= $keyCacheBlockSize ?> <span
-                                        class='text-muted'>(<?= human_readable($keyCacheBlockSize) ?>)</span></td>
+                                        class='text-muted'>(<?= human_readable_bytes($keyCacheBlockSize) ?>)</span></td>
                         </tr>
                     </table>
                     <?php
@@ -1151,7 +1362,7 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                     if ($keyCacheMissRate <= 100 && $keyCacheMissRate > 0 && $keyBufferFree < 20) {
                         ?>
                         <div class="alert alert-warning" role="alert">
-                            You could increate key_buffer_size. It is safe to raise this up to 1/4 of total system
+                            You could increase key_buffer_size. It is safe to raise this up to 1/4 of total system
                             memory.
                         </div>
                         <?php
@@ -1176,11 +1387,10 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
         </div>
     </div>
     <div class='row'>
+        <a id='query_cache'></a>
         <div class='col-sm-12'>
-            <div class='card'>
-                <div class='card-header'>
-                    Query cache
-                </div>
+            <div class='card border-0 shadow-sm'>
+                <div class='card-header'>Query cache</div>
                 <div class='card-body'>
                     <div class='row'>
                         <div class='col-sm-8'>
@@ -1201,43 +1411,44 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                                 </tr>
                                 <tr>
                                     <td>Query cache size:</td>
-                                    <td><?= human_readable($queryCacheSize) ?></td>
+                                    <td><?= human_readable_bytes($queryCacheSize) ?></td>
                                 </tr>
                                 <tr>
                                     <td>Query cache used memory:</td>
-                                    <td><?= human_readable($qcacheUsedMemory) ?></td>
+                                    <td><?= human_readable_bytes($qcacheUsedMemory) ?></td>
                                 </tr>
                                 <tr>
-                                    <td>Query cache memory fill ratio:</td>
-                                    <td><?= round($qcacheMemFillRatio, 2) ?> %</td>
+                                    <td>Query cache usage:</td>
+                                    <td><?= round($qcacheMemFillRatio, 1) ?> %</td>
                                 </tr>
                             </table>
                         </div>
                     </div>
                     <table class='table table-sm'>
                         <tr>
-                            <th>Variable name</th>
-                            <th>Default value</th>
-                            <th>Current value</th>
+                            <th style='width: 30%'>Variable name</th>
+                            <th style='width: 35%'>Default value</th>
+                            <th style='width: 35%'>Current value</th>
                         </tr>
                         <tr>
                             <td><samp>query_cache_limit</samp></td>
                             <td>1048576 <span class='text-muted'>(1 MB)</span></td>
                             <td><?= $queryCacheLimit ?> <span
-                                        class='text-muted'>(<?= human_readable($queryCacheLimit) ?>)</span></td>
+                                        class='text-muted'>(<?= human_readable_bytes($queryCacheLimit) ?>)</span></td>
                         </tr>
                         <tr>
                             <td><samp>query_cache_min_res_limit</samp></td>
                             <td>4096 <span class='text-muted'>(4 KB)</span></td>
                             <td><?= $queryCacheMinResUnit ?> <span
-                                        class='text-muted'>(<?= human_readable($queryCacheMinResUnit) ?>)</span></td>
+                                        class='text-muted'>(<?= human_readable_bytes($queryCacheMinResUnit) ?>)</span>
+                            </td>
                         </tr>
                         <tr>
                             <td><samp>query_cache_size</samp></td>
                             <td>1 M<span class='text-muted'>(>= MariaDB 10.1.7)</span><br>0 <span class='text-muted'>(<= MariaDB 10.1.6)</span>
                             </td>
                             <td><?= $queryCacheSize ?> <span
-                                        class='text-muted'>(<?= human_readable($queryCacheSize) ?>)</span></td>
+                                        class='text-muted'>(<?= human_readable_bytes($queryCacheSize) ?>)</span></td>
                         </tr>
                         <tr>
                             <td><samp>query_cache_type</samp></td>
@@ -1262,17 +1473,23 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                         </div>
                         <?php
                     }
+                    if ($qcacheMemFillRatio < 25) {
+                        ?>
+                        <div class="alert alert-info" role="alert">
+                            Your query cache size seems to be too high. Perhaps you can use these resources elsewhere.
+                        </div>
+                        <?php
+                    }
                     ?>
                 </div>
             </div>
         </div>
     </div>
     <div class='row'>
+        <a id='sort_operations'></a>
         <div class='col-sm-12'>
-            <div class='card'>
-                <div class='card-header'>
-                    Sort operations
-                </div>
+            <div class='card border-0 shadow-sm'>
+                <div class='card-header'>Sort operations</div>
                 <div class='card-body'>
                     <div class='row'>
                         <div class='col-sm-8'>
@@ -1286,11 +1503,11 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                             <table class='table table-sm'>
                                 <tr>
                                     <td>Sort buffer size:</td>
-                                    <td><?= human_readable($sortBufferSize) ?></td>
+                                    <td><?= human_readable_bytes($sortBufferSize) ?></td>
                                 </tr>
                                 <tr>
                                     <td>Read rnd buffer size:</td>
-                                    <td><?= human_readable($readRndBufferSize) ?></td>
+                                    <td><?= human_readable_bytes($readRndBufferSize) ?></td>
                                 </tr>
                                 <tr>
                                     <td>Sort merge passes:</td>
@@ -1309,19 +1526,19 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                     </div>
                     <table class='table table-sm'>
                         <tr>
-                            <th>Variable name</th>
-                            <th>Default value</th>
-                            <th>Current value</th>
+                            <th style='width: 30%'>Variable name</th>
+                            <th style='width: 35%'>Default value</th>
+                            <th style='width: 35%'>Current value</th>
                         </tr>
                         <tr>
                             <td><samp>sort_buffer_size</samp></td>
                             <td>2 M</span></td>
-                            <td><?= human_readable($sortBufferSize) ?></td>
+                            <td><?= human_readable_bytes($sortBufferSize) ?></td>
                         </tr>
                         <tr>
                             <td><samp>read_rnd_buffer_size</samp></td>
                             <td>262144 <span class='text-muted'>(256 KB)</span></td>
-                            <td><?= $readRndBufferSize ?> (<?= human_readable($readRndBufferSize) ?>)</td>
+                            <td><?= $readRndBufferSize ?> (<?= human_readable_bytes($readRndBufferSize) ?>)</td>
                         </tr>
                     </table>
                     <?php
@@ -1338,11 +1555,10 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
         </div>
     </div>
     <div class='row'>
+        <a id='join_operations'></a>
         <div class='col-sm-12'>
-            <div class='card'>
-                <div class='card-header'>
-                    Joins
-                </div>
+            <div class='card border-0 shadow-sm'>
+                <div class='card-header'>Joins</div>
                 <div class='card-body'>
                     <div class='row'>
                         <div class='col-sm-8'>
@@ -1351,7 +1567,7 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                             <table class='table table-sm'>
                                 <tr>
                                     <td>Join buffer size:</td>
-                                    <td><?= human_readable($joinBufferSize) ?></td>
+                                    <td><?= human_readable_bytes($joinBufferSize) ?></td>
                                 </tr>
                                 <tr>
                                     <td>Select full join:</td>
@@ -1366,14 +1582,16 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                     </div>
                     <table class='table table-sm'>
                         <tr>
-                            <th>Variable name</th>
-                            <th>Default value</th>
-                            <th>Current value</th>
+                            <th style='width: 30%'>Variable name</th>
+                            <th style='width: 35%'>Default value</th>
+                            <th style='width: 35%'>Current value</th>
                         </tr>
                         <tr>
                             <td><samp>join_buffer_size</samp></td>
                             <td>262144 (256 KB)</td>
-                            <td><?= human_readable($joinBufferSize) ?> (<?= human_readable($joinBufferSize) ?>)</td>
+                            <td><?= human_readable_bytes($joinBufferSize) ?>
+                                (<?= human_readable_bytes($joinBufferSize) ?>)
+                            </td>
                         </tr>
                     </table>
                     <?php
@@ -1414,11 +1632,10 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
         </div>
     </div>
     <div class='row'>
+        <a id='open_files'></a>
         <div class='col-sm-12'>
-            <div class='card'>
-                <div class='card-header'>
-                    Open files limit
-                </div>
+            <div class='card border-0 shadow-sm'>
+                <div class='card-header'>Open files limit</div>
                 <div class='card-body'>
                     <div class='row'>
                         <div class='col-sm-8'>
@@ -1446,9 +1663,9 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                     </div>
                     <table class='table table-sm'>
                         <tr>
-                            <th>Variable name</th>
-                            <th>Default value</th>
-                            <th>Current value</th>
+                            <th style='width: 30%'>Variable name</th>
+                            <th style='width: 35%'>Default value</th>
+                            <th style='width: 35%'>Current value</th>
                         </tr>
                         <tr>
                             <td><samp>open_files_limit</samp></td>
@@ -1478,11 +1695,10 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
         </div>
     </div>
     <div class='row'>
+        <a id='table_cache'></a>
         <div class='col-sm-12'>
-            <div class='card'>
-                <div class='card-header'>
-                    Table cache
-                </div>
+            <div class='card border-0 shadow-sm'>
+                <div class='card-header'>Table cache</div>
                 <div class='card-body'>
                     <div class='row'>
                         <div class='col-sm-8'>
@@ -1516,9 +1732,9 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                     </div>
                     <table class='table table-sm'>
                         <tr>
-                            <th>Variable name</th>
-                            <th>Default value</th>
-                            <th>Current value</th>
+                            <th style='width: 30%'>Variable name</th>
+                            <th style='width: 35%'>Default value</th>
+                            <th style='width: 35%'>Current value</th>
                         </tr>
                         <tr>
                             <td><samp>table_open_cache</samp></td>
@@ -1567,31 +1783,58 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
         </div>
     </div>
     <div class='row'>
+        <a id='temp_tables'></a>
         <div class='col-sm-12'>
-            <div class='card'>
-                <div class='card-header'>
-                    Temp tables
-                </div>
+            <div class='card border-0 shadow-sm'>
+                <div class='card-header'>Temp tables</div>
                 <div class='card-body'>
                     <div class='row'>
                         <div class='col-sm-8'>
+                            Note! BLOB and TEXT colums are now allowed in memory tables. If you are using there columns
+                            raising these values might not impact your ratio of on disk temp tables.
                         </div>
                         <div class='col-sm-4'>
                             <table class='table table-sm'>
                                 <tr>
                                     <td>Max heap table size:</td>
-                                    <td><?= human_readable($maxHeapTableSize) ?></td>
+                                    <td><?= human_readable_bytes($maxHeapTableSize) ?></td>
                                 </tr>
                                 <tr>
                                     <td>Tmp table size:</td>
-                                    <td><?= human_readable($tmpTableSize) ?></td>
+                                    <td><?= human_readable_bytes($tmpTableSize) ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Created tmp tables:</td>
+                                    <td><?= $createdTmpTables ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Created tmp disk tables:</td>
+                                    <td><?= $createdTmpDiskTables ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Table to disk pct.:</td>
+                                    <td><?= round($tmpDiskTables, 1) ?> %</td>
                                 </tr>
                             </table>
                         </div>
                     </div>
-                    <p>Created tmp tables: <?= $createdTmpTables ?></p>
-                    <p>Created tmp disk tables: <?= $createdTmpDiskTables ?></p>
-                    <p>Tmp disk tables: <?= round($tmpDiskTables, 1) ?></p>
+                    <table class='table table-sm'>
+                        <tr>
+                            <th style='width: 30%'>Variable name</th>
+                            <th style='width: 35%'>Default value</th>
+                            <th style='width: 35%'>Current value</th>
+                        </tr>
+                        <tr>
+                            <td><samp>max_heap_table_size</samp></td>
+                            <td>16777216 (16MB)</td>
+                            <td><?= $maxHeapTableSize ?> (<?= human_readable_bytes($maxHeapTableSize) ?>)</td>
+                        </tr>
+                        <tr>
+                            <td><samp>tmp_table_size</samp></td>
+                            <td>16777216 (16MB)</td>
+                            <td><?= $tmpTableSize ?> (<?= human_readable_bytes($tmpTableSize) ?>)</td>
+                        </tr>
+                    </table>
                     <?php
                     if ($tmpTableSize > $maxHeapTableSize) {
                         ?>
@@ -1607,8 +1850,6 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                             Perhaps you should increase your tmp_table_size and/or max_heap_table_size to reduce the
                             number
                             of disk-based temperary tables.<br>
-                            Note! BLOB and TEXT colums are now allowed in memory tables. If you are using there columns
-                            raising these values might not impact your ratio of on disk temp tables.
                         </div>
                         <?php
                     }
@@ -1625,34 +1866,64 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
         </div>
     </div>
     <div class='row'>
-        <div class='card'>
-            <div class='card-header'>
-                Table scans
-            </div>
-            <div class='card-body'>
-                <p>Com select: <?= $comSelect ?></p>
-                <p>Handler read rnd next: <?= $handlerReadRndNext ?></p>
-                <p>Read buffer size: <?= human_readable($readBufferSize) ?></p>
-                <?php
-                if ($comSelect > 0) {
-                    ?>
-                    <p>Full table scans ratio: <?= $fullTableScans ?> : 1</p>
+        <a id='table_scans'></a>
+        <div class='col-sm-12'>
+            <div class='card border-0 shadow-sm'>
+                <div class='card-header'>Table scans</div>
+                <div class='card-body'>
+                    <div class='row'>
+                        <div class='col-sm-8'>
+                        </div>
+                        <div class='col-sm-4'>
+                            <table class='table table-sm'>
+                                <tr>
+                                    <td>Read buffer size:</td>
+                                    <td><?= human_readable_bytes($readBufferSize) ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Full table scans ratio:</td>
+                                    <td><?= round($fullTableScans) ?> : 1</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                    <table class='table table-sm'>
+                        <tr>
+                            <th style='width: 30%'>Variable name</th>
+                            <th style='width: 35%'>Default value</th>
+                            <th style='width: 35%'>Current value</th>
+                        </tr>
+                        <tr>
+                            <td><samp>read_buffer_size</samp></td>
+                            <td>131072 (128 KB)</td>
+                            <td><?= $readBufferSize ?> (<?= human_readable_bytes($readBufferSize) ?>)</td>
+                        </tr>
+                    </table>
                     <?php
-
-                    if ($fullTableScans >= 4000 && $readBufferSize < 2 * 1024 * 1024) {
-                        ?>
-                        <div class="alert alert-danger" role="alert">
-                            You have a high ratio of sequential access requests to SELECTs. You may benefit from raising
-                            read_buffer_size and/or improving your use of indexes.
-                        </div>
-                        <?php
-                    }
-                    elseif ($readBufferSize > 8 * 1024 * 1024) {
-                        ?>
-                        <div class="alert alert-danger" role="alert">
-                            Read buffer is over 8 MB. There is probably no need for such a large read_buffer.
-                        </div>
-                        <?php
+                    if ($comSelect > 0) {
+                        if ($fullTableScans >= 4000 && $readBufferSize < 2 * 1024 * 1024) {
+                            ?>
+                            <div class="alert alert-danger" role="alert">
+                                You have a high ratio of sequential access requests to SELECTs. You may benefit from
+                                raising
+                                read_buffer_size and/or improving your use of indexes.
+                            </div>
+                            <?php
+                        }
+                        elseif ($readBufferSize > 8 * 1024 * 1024) {
+                            ?>
+                            <div class="alert alert-danger" role="alert">
+                                Read buffer is over 8 MB. There is probably no need for such a large read_buffer.
+                            </div>
+                            <?php
+                        }
+                        else {
+                            ?>
+                            <div class="alert alert-success" role="alert">
+                                Read buffer size seems to be fine.
+                            </div>
+                            <?php
+                        }
                     }
                     else {
                         ?>
@@ -1661,75 +1932,135 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                         </div>
                         <?php
                     }
-                }
-                else {
                     ?>
-                    <div class="alert alert-success" role="alert">
-                        Read buffer size seems to be fine.
-                    </div>
-                    <?php
-                }
-                ?>
+                </div>
             </div>
         </div>
     </div>
     <div class='row'>
-        <div class='card'>
-            <div class='card-header'>
-                Table locking
-            </div>
-            <div class='card-body'>
-                <p>Table locks waited: <?= $tableLocksWaited ?></p>
-                <p>Table locks immediate: <?= $tableLocksImmediate ?></p>
-                <p>Concurrent insert: <?= $concurrentInsert ?></p>
-                <p>Low priority updates: <?= $lowPriorityUpdates ?></p>
-                <?php
-                if ($tableLocksWaited > 0) {
-                    ?>
-                    <p>Lock / wait ratio: 1 : <?= round($immediateLocksMissRate) ?></p>
-                    <?php
-                }
-                if ($immediateLocksMissRate < 5000) {
-                    ?>
-                    <div class="alert alert-warning" role="alert">
-                        You may benefit from selective use of InnoDB
+        <a id='table_locking'></a>
+        <div class='col-sm-12'>
+            <div class='card border-0 shadow-sm'>
+                <div class='card-header'>Table locking</div>
+                <div class='card-body'>
+                    <div class='row'>
+                        <div class='col-sm-8'>
+                        </div>
+                        <div class='col-sm-4'>
+                            <table class='table table-sm'>
+                                <tr>
+                                    <td>Table locks immediate:</td>
+                                    <td><?= $tableLocksImmediate ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Table locks waited:</td>
+                                    <td><?= $tableLocksWaited ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Lock / wait ratio:</td>
+                                    <td>1 : <?= round($immediateLocksMissRate) ?></td>
+                                </tr>
+                            </table>
+                        </div>
                     </div>
+                    <table class='table table-sm'>
+                        <tr>
+                            <th style='width: 30%'>Variable name</th>
+                            <th style='width: 35%'>Default value</th>
+                            <th style='width: 35%'>Current value</th>
+                        </tr>
+                        <tr>
+                            <td><samp>concurrent_insert</samp></td>
+                            <td>AUTO</td>
+                            <td><?= $concurrentInsert ?></td>
+                        </tr>
+                        <tr>
+                            <td><samp>low_priority_updates</samp></td>
+                            <td>0</td>
+                            <td><?= $lowPriorityUpdates ?></td>
+                        </tr>
+                    </table>
                     <?php
-                }
-                else {
-                    ?>
-                    <div class="alert alert-success" role="alert">
-                        Your table locking seems to be fine
-                    </div>
-                    <?php
+                    if ($immediateLocksMissRate < 5000) {
+                        ?>
+                        <div class="alert alert-warning" role="alert">
+                            You may benefit from selective use of InnoDB
+                        </div>
+                        <?php
+                    }
+                    else {
+                        ?>
+                        <div class="alert alert-success" role="alert">
+                            Your table locking seems to be fine
+                        </div>
+                        <?php
 
-                }
-                ?>
+                    }
+                    ?>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class='row'>
+        <a id='status_variables'></a>
+        <div class='col-sm-12'>
+            <div class='card border-0 shadow-sm'>
+                <div class='card-header'>Status variables</div>
+                <div class='card-body'>
+                    <a class="btn btn-primary" data-toggle="collapse" href="#collapseStatus" role="button"
+                       aria-expanded="false"
+                       aria-controls="collapseStatus">Show status</a>
+                    <table class='table table-sm collapse' id='collapseStatus'>
+                        <?php
+                        foreach ($globalStatus as $globalStatusName => $globalStatusValue) {
+                            echo "<tr><td>" . $globalStatusName . "</td><td>" . $globalStatusValue . "</td></tr>\n";
+                        }
+                        ?>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class='row'>
+        <a id='system_variables'></a>
+        <div class='col-sm-12'>
+            <div class='card border-0 shadow-sm'>
+                <div class='card-header'>System variables</div>
+                <div class='card-body'>
+                    <a class="btn btn-primary" data-toggle="collapse" href="#collapseVariables" role="button"
+                       aria-expanded="false"
+                       aria-controls="collapseVariables">Show variables</a>
+                    <table class='table table-sm collapse' id='collapseVariables'>
+                        <?php
+                        foreach ($globalVariables as $globalVariableName => $globalVariableValue) {
+                            echo "<tr><td>" . $globalVariableName . "</td><td>" . $globalVariableValue . "</td></tr>\n";
+                        }
+                        ?>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
 </div>
+<div class='text-light bg-dark'>
+    <div class='container'>
+        <div class='row'>
+            <div class='col-sm-12'>
+                <p style='color: rgb(192, 190, 195)'>MySQL-Tuner-PHP is a open source project of Acropia. Feel free to
+                    use whereever and however you want!</p>
+            </div>
+        </div>
+        <div class='row'>
+            <div class='col-sm-2'>Col</div>
+            <div class='col-sm-2'>Col</div>
+            <div class='col-sm-2'>Col</div>
+            <div class='col-sm-2'>Col</div>
+            <div class='col-sm-2'>Col</div>
+            <div class='col-sm-2'>Col</div>
+        </div>
+    </div>
+</div>
 
-<h1>GLOBAL STATUS</h1>
-<a class="btn btn-primary" data-toggle="collapse" href="#collapseStatus" role="button" aria-expanded="false"
-   aria-controls="collapseStatus">Show status</a>
-<table class='table table-sm collapse' id='collapseStatus'>
-    <?php
-    foreach ($globalStatus as $globalStatusName => $globalStatusValue) {
-        echo "<tr><td>" . $globalStatusName . "</td><td>" . $globalStatusValue . "</td></tr>\n";
-    }
-    ?>
-</table>
-<h1>GLOBAL VARIABLES</h1>
-<a class="btn btn-primary" data-toggle="collapse" href="#collapseVariables" role="button" aria-expanded="false"
-   aria-controls="collapseVariables">Show variables</a>
-<table class='table table-sm collapse' id='collapseVariables'>
-    <?php
-    foreach ($globalVariables as $globalVariableName => $globalVariableValue) {
-        echo "<tr><td>" . $globalVariableName . "</td><td>" . $globalVariableValue . "</td></tr>\n";
-    }
-    ?>
-</table>
 <!-- Optional JavaScript -->
 <!-- jQuery first, then Popper.js, then Bootstrap JS -->
 <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"
