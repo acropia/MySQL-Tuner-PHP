@@ -151,7 +151,10 @@ $historicThreadsPerSec = $threadsCreated / $uptime;
 $maxConnections = $globalVariables['max_connections'];
 $maxUsedConnections = $globalStatus['Max_used_connections'];
 $threadsConnected = $globalStatus['Threads_connected'];
-$connectionsRatio = ($maxUsedConnections * 100 / $maxConnections);
+$maxConnectionsUsage = ($maxUsedConnections * 100 / $maxConnections);
+$abortedConnects = $globalStatus['Aborted_connects'];
+$connections = $globalStatus['Connections'];
+$abortedConnectsPct = percentage($abortedConnects, $connections);
 
 /* InnoDB */
 $innodbBufferPoolSize = $globalVariables['innodb_buffer_pool_size'];
@@ -287,6 +290,8 @@ $queryCacheType = $globalVariables['query_cache_type'];
 $queryCacheSize = $globalVariables['query_cache_size'];
 $queryCacheLimit = $globalVariables['query_cache_limit'];
 $queryCacheMinResUnit = $globalVariables['query_cache_min_res_unit'];
+$qcacheHits = $globalStatus['Qcache_hits'];
+$comSelect = $globalStatus['Com_select'];
 $qcacheFreeMemory = $globalStatus['Qcache_free_memory'];
 $qcacheTotalBlocks = $globalStatus['Qcache_total_blocks'];
 $qcacheFreeBlocks = $globalStatus['Qcache_free_blocks'];
@@ -294,6 +299,7 @@ $qcacheLowmemPrunes = $globalStatus['Qcache_lowmem_prunes'];
 
 $qcacheUsedMemory = $queryCacheSize - $qcacheFreeMemory;
 $qcacheMemFillRatio = $qcacheUsedMemory * 100 / $queryCacheSize;
+$queryCacheEfficiency = $qcacheHits / ($comSelect + $qcacheHits);
 
 /* Sort operations */
 $sortMergePasses = $globalStatus['Sort_merge_passes'];
@@ -307,6 +313,7 @@ $passesPerSort = ($sortMergePasses > 0) ? $sortMergePasses / $totalSorts : 0;
 /* Joins */
 $selectFullJoin = $globalStatus['Select_full_join'];
 $selectRangeCheck = $globalStatus['Select_range_check'];
+$joinsWithoutIndexesPerDay = ($selectFullJoin + $selectRangeCheck) / ($uptime / 86400);
 $joinBufferSize = $globalVariables['join_buffer_size'];
 $raiseJoinBuffer = ($selectFullJoin > 0 || $selectRangeCheck > 0);
 
@@ -319,6 +326,7 @@ $openFilesRatio = $openFiles * 100 / $openFilesLimit;
 $dataDir = $globalVariables['datadir'];
 $tableCache = $globalVariables['table_cache'];
 $tableOpenCache = $globalVariables['table_open_cache'];
+$tableOpenCacheInstances = $globalVariables['table_open_cache_instances'];
 $tableDefinitionCache = $globalVariables['table_definition_cache'];
 $openTables = $globalStatus['Open_tables'];
 $openedTables = $globalStatus['Opened_tables'];
@@ -363,6 +371,8 @@ $tableLocksWaited = $globalStatus['Table_locks_waited'];
 $tableLocksImmediate = $globalStatus['Table_locks_immediate'];
 $concurrentInsert = $globalVariables['concurrent_insert'];
 $lowPriorityUpdates = $globalVariables['low_priority_updates'];
+
+$tableLocksWaitedPct = percentage($tableLocksWaited, $tableLocksImmediate);
 
 $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tableLocksWaited : 99999;
 ?>
@@ -561,17 +571,17 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                             <th>Savepoints</th>
                         </tr>
                         <?php
-                        foreach ($engines as $engineName=>$engineConfig) {
-                        ?>
-                        <tr>
-                            <td><?= $engineName ?></td>
-                            <td><?= $engineConfig['Support'] ?></td>
-                            <td><?= $engineConfig['Comment'] ?></td>
-                            <td><?= $engineConfig['Transactions'] ?></td>
-                            <td><?= $engineConfig['XA'] ?></td>
-                            <td><?= $engineConfig['Savepoints'] ?></td>
-                        </tr>
-                        <?php
+                        foreach ($engines as $engineName => $engineConfig) {
+                            ?>
+                            <tr>
+                                <td><?= $engineName ?></td>
+                                <td><?= $engineConfig['Support'] ?></td>
+                                <td><?= $engineConfig['Comment'] ?></td>
+                                <td><?= $engineConfig['Transactions'] ?></td>
+                                <td><?= $engineConfig['XA'] ?></td>
+                                <td><?= $engineConfig['Savepoints'] ?></td>
+                            </tr>
+                            <?php
                         }
                         ?>
                     </table>
@@ -892,11 +902,11 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                                 </tr>
                                 <tr>
                                     <td>Max used connections:</td>
-                                    <td><?= $maxUsedConnections ?></td>
+                                    <td><?= $maxUsedConnections ?><br><?= round($maxConnectionsUsage, 1) ?> %</td>
                                 </tr>
                                 <tr>
-                                    <td>Connections ratio:</td>
-                                    <td><?= round($connectionsRatio, 1) ?> %</td>
+                                    <td>Aborted connects:</td>
+                                    <td><?= $abortedConnects ?><br><?= round($abortedConnectsPct, 1) ?> %</td>
                                 </tr>
                             </table>
                         </div>
@@ -914,14 +924,14 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                         </tr>
                     </table>
                     <?php
-                    if ($connectionsRatio > 85) {
+                    if ($maxConnectionsUsage > 85) {
                         ?>
                         <div class="alert alert-danger" role="alert">
                             You should raise max_connections
                         </div>
                         <?php
                     }
-                    elseif ($connectionsRatio < 10) {
+                    elseif ($maxConnectionsUsage < 10) {
                         ?>
                         <div class="alert alert-danger" role="alert">
                             You are using less than 10% of your configured max_connections. Lowering max_connections
@@ -1249,38 +1259,46 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                         </tr>
                         <tr>
                             <td><samp>aria_pagecache_buffer_size</samp></td>
-                            <td>134217720  <span class='text-muted'>(128 MB)</span></td>
-                            <td><?= $ariaPagecacheBufferSize ?> <span class='text-muted'>(<?= human_readable_bytes($ariaPagecacheBufferSize) ?>)</span></td>
+                            <td>134217720 <span class='text-muted'>(128 MB)</span></td>
+                            <td><?= $ariaPagecacheBufferSize ?> <span
+                                        class='text-muted'>(<?= human_readable_bytes($ariaPagecacheBufferSize) ?>)</span>
+                            </td>
                         </tr>
                         <tr>
                             <td><samp>join_buffer_size</samp></td>
-                            <td>262144  <span class='text-muted'>(256 KB)</span></td>
-                            <td><?= $joinBufferSize ?> <span class='text-muted'>(<?= human_readable_bytes($joinBufferSize) ?>)</span></td>
+                            <td>262144 <span class='text-muted'>(256 KB)</span></td>
+                            <td><?= $joinBufferSize ?> <span
+                                        class='text-muted'>(<?= human_readable_bytes($joinBufferSize) ?>)</span></td>
                         </tr>
                         <tr>
                             <td><samp>net_buffer_length</samp></td>
                             <td>16384 <span class='text-muted'>(16 KB)</span></td>
-                            <td><?= $netBufferLength ?> <span class='text-muted'>(<?= human_readable_bytes($netBufferLength) ?>)</span></td>
+                            <td><?= $netBufferLength ?> <span
+                                        class='text-muted'>(<?= human_readable_bytes($netBufferLength) ?>)</span></td>
                         </tr>
                         <tr>
                             <td><samp>read_buffer_size</samp></td>
                             <td>131072 <span class='text-muted'>(128 KB)</span></td>
-                            <td><?= $readBufferSize ?> <span class='text-muted'>(<?= human_readable_bytes($readBufferSize) ?>)</span></td>
+                            <td><?= $readBufferSize ?> <span
+                                        class='text-muted'>(<?= human_readable_bytes($readBufferSize) ?>)</span></td>
                         </tr>
                         <tr>
                             <td><samp>read_rnd_buffer_size</samp></td>
                             <td>262144 <span class='text-muted'>(256 KB)</span></td>
-                            <td><?= $readRndBufferSize ?> <span class='text-muted'>(<?= human_readable_bytes($readRndBufferSize) ?>)</span></td>
+                            <td><?= $readRndBufferSize ?> <span
+                                        class='text-muted'>(<?= human_readable_bytes($readRndBufferSize) ?>)</span></td>
                         </tr>
                         <tr>
                             <td><samp>sort_buffer_size</samp></td>
-                            <td> <span class='text-muted'>(2 MB)</span></td>
-                            <td><?= $sortBufferSize ?> <span class='text-muted'>(<?= human_readable_bytes($sortBufferSize) ?>)</span></td>
+                            <td><span class='text-muted'>(2 MB)</span></td>
+                            <td><?= $sortBufferSize ?> <span
+                                        class='text-muted'>(<?= human_readable_bytes($sortBufferSize) ?>)</span></td>
                         </tr>
                         <tr>
                             <td><samp>thread_stack</samp></td>
                             <td>299008 <span class='text-muted'>(<?= human_readable_bytes(299008) ?>)</span></td>
-                            <td><?= $threadStack ?> <span class='text-muted'>(<?= human_readable_bytes($threadStack) ?>)</span></td>
+                            <td><?= $threadStack ?> <span
+                                        class='text-muted'>(<?= human_readable_bytes($threadStack) ?>)</span></td>
                         </tr>
                     </table>
                     <?php
@@ -1421,6 +1439,10 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                                     <td>Query cache usage:</td>
                                     <td><?= round($qcacheMemFillRatio, 1) ?> %</td>
                                 </tr>
+                                <tr>
+                                    <td>Query cache efficiency:</td>
+                                    <td><?= $queryCacheEfficiency ?></td>
+                                </tr>
                             </table>
                         </div>
                     </div>
@@ -1538,7 +1560,8 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                         <tr>
                             <td><samp>read_rnd_buffer_size</samp></td>
                             <td>262144 <span class='text-muted'>(256 KB)</span></td>
-                            <td><?= $readRndBufferSize ?> (<?= human_readable_bytes($readRndBufferSize) ?>)</td>
+                            <td><?= $readRndBufferSize ?> <span
+                                        class='text-muted'>(<?= human_readable_bytes($readRndBufferSize) ?>)</span></td>
                         </tr>
                     </table>
                     <?php
@@ -1577,6 +1600,10 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                                     <td>Select range check:</td>
                                     <td><?= $selectRangeCheck ?></td>
                                 </tr>
+                                <tr>
+                                    <td>Joins without indexes per day:</td>
+                                    <td><?= round($joinsWithoutIndexesPerDay) ?></td>
+                                </tr>
                             </table>
                         </div>
                     </div>
@@ -1588,9 +1615,9 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                         </tr>
                         <tr>
                             <td><samp>join_buffer_size</samp></td>
-                            <td>262144 (256 KB)</td>
+                            <td>262144 <span class='text-muted'>(256 KB)</span></td>
                             <td><?= human_readable_bytes($joinBufferSize) ?>
-                                (<?= human_readable_bytes($joinBufferSize) ?>)
+                                <span class='text-muted'>(<?= human_readable_bytes($joinBufferSize) ?>)</span>
                             </td>
                         </tr>
                     </table>
@@ -1711,8 +1738,8 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                                 </tr>
                                 <tr>
                                     <td>Table cache:</td>
-                                    <td><?= $openTables ?> of <?= $tableOpenCache ?><br><?= round($tableCacheFill, 1) ?>
-                                        %
+                                    <td><?= $openTables ?> of <?= $tableOpenCache ?><br>
+                                        <?= round($tableCacheFill, 1) ?> %
                                     </td>
                                 </tr>
                                 <tr>
@@ -1740,6 +1767,11 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                             <td><samp>table_open_cache</samp></td>
                             <td>2000</td>
                             <td><?= $tableOpenCache ?></td>
+                        </tr>
+                        <tr>
+                            <td><samp>table_open_cache_instances</samp></td>
+                            <td>8</td>
+                            <td><?= $tableOpenCacheInstances ?></td>
                         </tr>
                         <tr>
                             <td><samp>table_definition_cache</samp></td>
@@ -1809,11 +1841,7 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                                 </tr>
                                 <tr>
                                     <td>Created tmp disk tables:</td>
-                                    <td><?= $createdTmpDiskTables ?></td>
-                                </tr>
-                                <tr>
-                                    <td>Table to disk pct.:</td>
-                                    <td><?= round($tmpDiskTables, 1) ?> %</td>
+                                    <td><?= $createdTmpDiskTables ?><br><?= round($tmpDiskTables, 1) ?> %</td>
                                 </tr>
                             </table>
                         </div>
@@ -1826,13 +1854,15 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                         </tr>
                         <tr>
                             <td><samp>max_heap_table_size</samp></td>
-                            <td>16777216 (16MB)</td>
-                            <td><?= $maxHeapTableSize ?> (<?= human_readable_bytes($maxHeapTableSize) ?>)</td>
+                            <td>16777216 <span class='text-muted'>(16MB)</span></td>
+                            <td><?= $maxHeapTableSize ?> <span
+                                        class='text-muted'>(<?= human_readable_bytes($maxHeapTableSize) ?>)</span></td>
                         </tr>
                         <tr>
                             <td><samp>tmp_table_size</samp></td>
-                            <td>16777216 (16MB)</td>
-                            <td><?= $tmpTableSize ?> (<?= human_readable_bytes($tmpTableSize) ?>)</td>
+                            <td>16777216 <span class='text-muted'>(16MB)</span></td>
+                            <td><?= $tmpTableSize ?> <span
+                                        class='text-muted'>(<?= human_readable_bytes($tmpTableSize) ?>)</span></td>
                         </tr>
                     </table>
                     <?php
@@ -1895,8 +1925,9 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                         </tr>
                         <tr>
                             <td><samp>read_buffer_size</samp></td>
-                            <td>131072 (128 KB)</td>
-                            <td><?= $readBufferSize ?> (<?= human_readable_bytes($readBufferSize) ?>)</td>
+                            <td>131072 <span class='text-muted'>(128 KB)</span></td>
+                            <td><?= $readBufferSize ?> <span
+                                        class='text-muted'>(<?= human_readable_bytes($readBufferSize) ?>)</span></td>
                         </tr>
                     </table>
                     <?php
@@ -1954,7 +1985,9 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                                 </tr>
                                 <tr>
                                     <td>Table locks waited:</td>
-                                    <td><?= $tableLocksWaited ?></td>
+                                    <td><?= $tableLocksWaited ?><br>
+                                        <?= round($tableLocksWaitedPct,3) ?> %
+                                    </td>
                                 </tr>
                                 <tr>
                                     <td>Lock / wait ratio:</td>
