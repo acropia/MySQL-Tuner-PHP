@@ -146,9 +146,13 @@ $threadsCached = $globalStatus['Threads_cached'];
 $threadHandling = $globalVariables['thread_handling'];
 $threadCacheSize = $globalVariables['thread_cache_size'];
 $historicThreadsPerSec = $threadsCreated / $uptime;
+$connections = $globalStatus['Connections'];
+$threadCacheHitRate = 100 - (($threadsCreated / $connections) * 100);
 
 /* Used connections */
 $maxConnections = $globalVariables['max_connections'];
+$interactiveTimeout = $globalVariables['interactive_timeout'];
+$waitTimeout = $globalVariables['wait_timeout'];
 $maxUsedConnections = $globalStatus['Max_used_connections'];
 $threadsConnected = $globalStatus['Threads_connected'];
 $maxConnectionsUsage = ($maxUsedConnections * 100 / $maxConnections);
@@ -310,14 +314,13 @@ $sortRange = $globalStatus['Sort_range'];
 $sortBufferSize = $globalVariables['sort_buffer_size'];
 $readRndBufferSize = $globalVariables['read_rnd_buffer_size'];
 $totalSorts = $sortScan + $sortRange;
-$passesPerSort = ($sortMergePasses > 0) ? $sortMergePasses / $totalSorts : 0;
+$tempSortTablePct = ($sortMergePasses > 0) ? percentage($sortMergePasses, $totalSorts) : 0;
 
 /* Joins */
 $selectFullJoin = $globalStatus['Select_full_join'];
 $selectRangeCheck = $globalStatus['Select_range_check'];
 $joinsWithoutIndexesPerDay = ($selectFullJoin + $selectRangeCheck) / ($uptime / 86400);
 $joinBufferSize = $globalVariables['join_buffer_size'];
-$raiseJoinBuffer = ($selectFullJoin > 0 || $selectRangeCheck > 0);
 
 /* Open files limit */
 $openFilesLimit = $globalVariables['open_files_limit'];
@@ -339,22 +342,23 @@ $tableCount = $stmt->fetch()['table_count'];
 
 if ($openedTables != 0 && $tableOpenCache != 0) {
     $tableCacheHitRate = $openTables * 100 / $openedTables;
-    $tableCacheFill = $openTables * 100 / $tableOpenCache;
+    $tableCacheUsage = percentage($openTables, $tableOpenCache);
 }
 elseif ($openedTables == 0 && $tableOpenCache != 0) {
     $tableCacheHitRate = 100;
-    $tableCacheFill = $openTables * 100 / $tableOpenCache;
+    $tableCacheUsage = percentage($openTables, $tableOpenCache);
 }
 else {
     $tableCacheError = true;
 }
+$tableDefinitionCacheUsage = percentage($openTableDefinitions, $tableDefinitionCache);
 
 /* Temp tables */
 $createdTmpTables = $globalStatus['Created_tmp_tables'];
 $createdTmpDiskTables = $globalStatus['Created_tmp_disk_tables'];
 $tmpTableSize = $globalVariables['tmp_table_size'];
 $maxHeapTableSize = $globalVariables['max_heap_table_size'];
-$tmpDiskTables = ($createdTmpTables == 0) ? 0 : $createdTmpDiskTables * 100 / ($createdTmpTables + $createdTmpDiskTables);
+$tmpDiskTablesPct = ($createdTmpTables == 0) ? 0 : $createdTmpDiskTables * 100 / ($createdTmpTables + $createdTmpDiskTables);
 
 /* Table scans */
 $comSelect = $globalStatus['Com_select'];
@@ -622,7 +626,8 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                                 </tr>
                                 <tr>
                                     <td>Slow query count:</td>
-                                    <td><?= $slowQueries ?> of <?= $questions ?><br><?= $slowQueriesPct ?> %</td>
+                                    <td><?= $slowQueries ?> of <?= $questions ?><br><?= $slowQueriesPct ?>
+                                        %<?= ($slowQueriesPct > 5) ? alert_error() : alert_check() ?></td>
                                 </tr>
                                 <tr>
                                     <td>Long query time:</td>
@@ -718,6 +723,14 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                             Configure <samp>long_query_time</samp> to a higher value. The current setting of zero, will
                             cause ALL queries to be logged! If you actually want to log all queries, use the query log,
                             not the slow query log.
+                        </div>
+                        <?php
+                    }
+                    if ($slowQueriesPct > 5) {
+                        ?>
+                        <div class="alert alert-danger" role="alert">
+                            More than 5 percent of all queries is slower than the configured
+                            <samp>long_query_time</samp> of <?= $longQueryTime ?> seconds.
                         </div>
                         <?php
                     }
@@ -839,6 +852,11 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                                     <td>Threads per sec. avg.:</td>
                                     <td><?= round($historicThreadsPerSec, 2) ?></td>
                                 </tr>
+                                <tr>
+                                    <td>Thread cache hit rate:</td>
+                                    <td><?= round($threadCacheHitRate, 1) ?> %
+                                        <?= ($threadCacheHitRate > 50) ? alert_check() : alert_warning(); ?></td>
+                                </tr>
                             </table>
                         </div>
                     </div>
@@ -861,6 +879,13 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                         </tr>
                     </table>
                     <?php
+                    if ($threadCacheSize == 0 && $threadHandling != "pool-of-threads") {
+                        ?>
+                        <div class="alert alert-danger" role="alert">
+                            Thread cache is disabled. Set <samp>thread_cache_size</samp> to 4 as a starting value.
+                        </div>
+                        <?php
+                    }
                     if ($historicThreadsPerSec > 2 && $threadsCached < 1) {
                         ?>
                         <div class="alert alert-danger" role="alert">
@@ -868,10 +893,11 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                         </div>
                         <?php
                     }
-                    else {
+                    if ($threadCacheHitRate <= 50) {
                         ?>
-                        <div class="alert alert-success" role="alert">
-                            Your thread_cache_size is fine
+                        <div class="alert alert-danger" role="alert">
+                            Too many threads can not be used from cache. Raise the <samp>thread_cache_size</samp> until
+                            this indicator stays over 50% over a longer period.
                         </div>
                         <?php
                     }
@@ -901,7 +927,10 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                                 </tr>
                                 <tr>
                                     <td>Max used connections:</td>
-                                    <td><?= $maxUsedConnections ?><br><?= round($maxConnectionsUsage, 1) ?> %</td>
+                                    <td><?= $maxUsedConnections ?><?= ($maxConnectionsUsage < 10) ? alert_info() : '' ?>
+                                        <br>
+                                        <?= round($maxConnectionsUsage, 1) ?>
+                                        %<?= ($maxConnectionsUsage > 85) ? alert_error() : alert_check() ?></td>
                                 </tr>
                                 <tr>
                                     <td>Aborted connects:</td>
@@ -917,9 +946,21 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                             <th style='width: 35%'>Current value</th>
                         </tr>
                         <tr>
+                            <td><samp>interactive_timeout</samp></td>
+                            <td>28800</td>
+                            <td><?= $interactiveTimeout ?> <span
+                                        class='text-muted'>(<?= human_readable_time($interactiveTimeout) ?>)</span></td>
+                        </tr>
+                        <tr>
                             <td><samp>max_connections</samp></td>
                             <td>151</td>
                             <td><?= $maxConnections ?></td>
+                        </tr>
+                        <tr>
+                            <td><samp>wait_timeout</samp></td>
+                            <td>28800</td>
+                            <td><?= $waitTimeout ?> <span
+                                        class='text-muted'>(<?= human_readable_time($waitTimeout) ?>)</span></td>
                         </tr>
                     </table>
                     <?php
@@ -932,10 +973,9 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                     }
                     elseif ($maxConnectionsUsage < 10) {
                         ?>
-                        <div class="alert alert-danger" role="alert">
+                        <div class="alert alert-info" role="alert">
                             You are using less than 10% of your configured max_connections. Lowering max_connections
-                            could
-                            help to avoid an over-allocation of memory.
+                            could help to avoid an over-allocation of memory.
                         </div>
                         <?php
                     }
@@ -1428,11 +1468,11 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                             <table class='table table-sm'>
                                 <tr>
                                     <td>Query cache type:</td>
-                                    <td><?= $queryCacheType ?></td>
+                                    <td><?= $queryCacheType ?><?= ($queryCacheType == "OFF") ? alert_check() : alert_error() ?></td>
                                 </tr>
                                 <tr>
                                     <td>Query cache size:</td>
-                                    <td><?= human_readable_bytes($queryCacheSize) ?></td>
+                                    <td><?= human_readable_bytes($queryCacheSize) ?><?= ($queryCacheType == "OFF" && $queryCacheSize == 0) ? alert_check() : alert_warning() ?></td>
                                 </tr>
                                 <tr>
                                     <td>Query cache used memory:</td>
@@ -1483,22 +1523,24 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                         </tr>
                     </table>
                     <?php
-                    if ($queryCacheSize == 0) {
+                    if ($queryCacheSize > 0 || $queryCacheType == "OFF") {
                         ?>
-                        <div class="alert alert-info" role="alert">
-                            Query cache is supported but not enabled. Perhaps you should set the query_cache_size
+                        <div class="alert alert-danger" role="alert">
+                            Query cache is enabled but should not be used on multi-processor machines due to mutex
+                            contention.
                         </div>
                         <?php
                     }
-                    if ($queryCacheSize > 0 && $queryCacheType) {
+                    if ($queryCacheSize > 0 && $queryCacheType == "OFF") {
                         ?>
                         <div class="alert alert-warning" role="alert">
                             Query cache is disabled by query_cache_type, but effectively enabled because
-                            query_cache_size is higher than zero.
+                            query_cache_size is higher than zero. Disable it completly by setting:
+                            <samp>query_cache_size = 0</samp> and <samp>query_cache_type = OFF</samp>
                         </div>
                         <?php
                     }
-                    if ($queryCacheUsage < 25) {
+                    elseif ($queryCacheUsage < 25) {
                         ?>
                         <div class="alert alert-info" role="alert">
                             Your query cache size seems to be too high. Perhaps you can use these resources elsewhere.
@@ -1539,8 +1581,9 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                                     <td><?= $sortMergePasses ?></td>
                                 </tr>
                                 <tr>
-                                    <td>Passes per sort:</td>
-                                    <td><?= $passesPerSort ?></td>
+                                    <td>Temp sort tables pct.:</td>
+                                    <td><?= $tempSortTablePct ?>
+                                        %<?= ($tempSortTablePct < 10) ? alert_check() : alert_warning() ?></td>
                                 </tr>
                                 <tr>
                                     <td>Total sorts:</td>
@@ -1557,8 +1600,9 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                         </tr>
                         <tr>
                             <td><samp>sort_buffer_size</samp></td>
-                            <td>2 M</span></td>
-                            <td><?= human_readable_bytes($sortBufferSize) ?></td>
+                            <td>2097152 <span class='text-muted'>(2 MB)</span></td>
+                            <td><?= $sortBufferSize ?>
+                                <span class='text-muted'>(<?= human_readable_bytes($sortBufferSize) ?>)</span></td>
                         </tr>
                         <tr>
                             <td><samp>read_rnd_buffer_size</samp></td>
@@ -1572,6 +1616,14 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                         ?>
                         <div class="alert alert-info" role="alert">
                             No sort operations have been performed
+                        </div>
+                        <?php
+                    }
+                    if ($tempSortTablePct > 10) {
+                        ?>
+                        <div class="alert alert-warning" role="alert">
+                            Lots of sorts require temp tables. Perhaps you could raise <samp>sort_buffer_size</samp> and
+                            <samp>read_rnd_buffer_size</samp>.
                         </div>
                         <?php
                     }
@@ -1605,7 +1657,7 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                                 </tr>
                                 <tr>
                                     <td>Joins without indexes per day:</td>
-                                    <td><?= round($joinsWithoutIndexesPerDay) ?></td>
+                                    <td><?= round($joinsWithoutIndexesPerDay) ?><?= ($joinsWithoutIndexesPerDay > 250) ? alert_warning() : alert_check() ?></td>
                                 </tr>
                             </table>
                         </div>
@@ -1639,15 +1691,17 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                             query log.
                         </div>
                         <?php
-                        if ($raiseJoinBuffer) {
-                            ?>
-                            <div class="alert alert-info" role="alert">
-                                If you are unable to optimize your queries you may want to increase your
-                                join_buffer_size to
-                                accomodate larger joins in one pass.
-                            </div>
-                            <?php
-                        }
+                    }
+                    if ($joinsWithoutIndexesPerDay > 250) {
+                        ?>
+                        <div class="alert alert-warning" role="alert">
+                            Your joins without indexes (avg. per day) is very high. You could address this issue by
+                            adding appropriate indexes. If adding indexes isn't an option then your can raise the <samp>join_buffer_size</samp>
+                            until the joins without indexes per day is at an acceptable level. Be informed that this
+                            buffer is always reserved for each active connection. Raising this buffer size too high
+                            could trigger memory issues.
+                        </div>
+                        <?php
                     }
                     if ($joinBufferSize >= 4 * 1024 * 1024) {
                         ?>
@@ -1742,12 +1796,14 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                                 <tr>
                                     <td>Table cache:</td>
                                     <td><?= $openTables ?> of <?= $tableOpenCache ?><br>
-                                        <?= round($tableCacheFill, 1) ?> %
+                                        <?= round($tableCacheUsage, 1) ?> %<?= ($tableCacheUsage < 95) ? alert_check() : alert_warning() ?>
                                     </td>
                                 </tr>
                                 <tr>
                                     <td>Definition cache:</td>
-                                    <td><?= $openTableDefinitions ?> of <?= $tableDefinitionCache ?></td>
+                                    <td><?= $openTableDefinitions ?> of <?= $tableDefinitionCache ?><br>
+                                        <?= round($tableDefinitionCacheUsage, 1) ?> %<?= ($tableDefinitionCacheUsage < 95) ? alert_check() : alert_warning() ?>
+                                    </td>
                                 </tr>
                                 <tr>
                                     <td>Table cache hit rate:</td>
@@ -1791,14 +1847,14 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                         <?php
                     }
 
-                    if ($tableCacheFill < 95) {
+                    if ($tableCacheUsage < 95) {
                         ?>
                         <div class="alert alert-success" role="alert">
                             Your table_cache value seems to be fine
                         </div>
                         <?php
                     }
-                    elseif ($tableCacheHitRate <= 85 || $tableCacheFill >= 95) {
+                    elseif ($tableCacheHitRate <= 85 || $tableCacheUsage >= 95) {
                         ?>
                         <div class="alert alert-danger" role="alert">
                             You should probably increase your table_cache
@@ -1844,7 +1900,9 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                                 </tr>
                                 <tr>
                                     <td>Created tmp disk tables:</td>
-                                    <td><?= $createdTmpDiskTables ?><br><?= round($tmpDiskTables, 1) ?> %</td>
+                                    <td><?= $createdTmpDiskTables ?><br>
+                                        <?= round($tmpDiskTablesPct, 1) ?>
+                                        %<?= ($tmpDiskTablesPct > 25) ? alert_warning() : alert_check() ?></td>
                                 </tr>
                             </table>
                         </div>
@@ -1877,19 +1935,20 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                         <?php
                     }
 
-                    if ($tmpDiskTables >= 25) {
+                    if ($tmpDiskTablesPct >= 25 && $tmpTableSize < 256 * 1024 * 1024) {
                         ?>
                         <div class="alert alert-danger" role="alert">
                             Perhaps you should increase your tmp_table_size and/or max_heap_table_size to reduce the
                             number
-                            of disk-based temperary tables.<br>
+                            of disk-based temporary tables.
                         </div>
                         <?php
                     }
-                    else {
+                    elseif ($tmpDiskTablesPct >= 25 && $tmpTableSize >= 256 * 1024 * 1024) {
                         ?>
-                        <div class="alert alert-success" role="alert">
-                            Your temporary tables ratio to be fine.
+                        <div class="alert alert-danger" role="alert">
+                            Your <samp>tmp_table_size</samp> is already very high. Do not increase it any further but
+                            optimize your queries.
                         </div>
                         <?php
                     }
@@ -1989,7 +2048,7 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                                 <tr>
                                     <td>Table locks waited:</td>
                                     <td><?= $tableLocksWaited ?><br>
-                                        <?= round($tableLocksWaitedPct,3) ?> %
+                                        <?= round($tableLocksWaitedPct, 3) ?> %
                                     </td>
                                 </tr>
                                 <tr>
