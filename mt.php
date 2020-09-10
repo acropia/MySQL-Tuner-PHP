@@ -132,7 +132,7 @@ $longQueryTime = $globalVariables['long_query_time'];
 $minExaminedRowLimit = $globalVariables['min_examined_row_limit'];
 $slowQueryLog = $globalVariables['slow_query_log'];
 $slowQueryLogFile = $globalVariables['slow_query_log_file'];
-$slowQueriesPct = $slowQueryLog * 100 / $questions;
+$slowQueriesPct = percentage($slowQueries, $questions);
 
 /* Binary log */
 $logBin = $globalVariables['log_bin'];
@@ -191,14 +191,13 @@ if ($innodbIndexLength > 0) {
     $innodbBufferPoolPagesMisc = $globalStatus['Innodb_buffer_pool_pages_misc'];
     $innodbBufferPoolPagesFree = $globalStatus['Innodb_buffer_pool_pages_free'];
     $innodbBufferPoolPagesTotal = $globalStatus['Innodb_buffer_pool_pages_total'];
-    $innodbBufferPoolReadAheadSeq = $globalStatus['Innodb_buffer_pool_read_ahead_seq'];
     $innodbOsLogPendingFsyncs = $globalStatus['Innodb_os_log_pending_fsyncs'];
     $innodbOsLogPendingWrites = $globalStatus['Innodb_os_log_pending_writes'];
     $innodbLogWaits = $globalStatus['Innodb_log_waits'];
     $innodbRowLockTime = $globalStatus['Innodb_row_lock_time'];
     $innodbRowLockWaits = $globalStatus['Innodb_row_lock_waits'];
 
-    $innodbBufferPoolFreePct = $innodbBufferPoolPagesFree * 100 / $innodbBufferPoolPagesTotal;
+    $innodbBufferPoolFreePct = percentage($innodbBufferPoolPagesFree, $innodbBufferPoolPagesTotal);
 }
 
 /* Memory usage */
@@ -238,6 +237,7 @@ $maxHeapTableSize = $globalVariables['max_heap_table_size'];
 $innodbBufferPoolSize = $globalVariables['innodb_buffer_pool_size'];
 if (empty($innodbBufferPoolSize)) $innodbBufferPoolSize = 0;
 
+// innodb_additional_mem_pool_size deprecated in MariaDB 10.0, Removed in 10.2.2
 $innodbAdditionalMemPoolSize = $globalVariables['innodb_additional_mem_pool_size'];
 if (empty($innodbAdditionalMemPoolSize)) $innodbAdditionalMemPoolSize = 0;
 
@@ -268,15 +268,17 @@ $versionCompileMachine = $globalVariables['version_compile_machine'];
 
 if ($keyReads == 0) {
     $keyCacheMissRate = 0;
-    $keyBufferFree = $keyBlocksUnused * $keyCacheBlockSize / $keyBufferSize * 100;
+    $keyBufferFreePct = $keyBlocksUnused * $keyCacheBlockSize / $keyBufferSize * 100;
+    $keyBufferUsed = $keyBufferSize - (($keyBufferSize / 100) * $keyBufferFreePct);
 }
 else {
     $keyCacheMissRate = $keyReadRequests / $keyReads;
     if (!empty($keyBlocksUnused)) {
-        $keyBufferFree = $keyBlocksUnused * $keyCacheBlockSize / $keyBufferSize * 100;
+        $keyBufferFreePct = $keyBlocksUnused * $keyCacheBlockSize / $keyBufferSize * 100;
+        $keyBufferUsed = $keyBufferSize - (($keyBufferSize / 100) * $keyBufferFreePct);
     }
     else {
-        $keyBufferFree = "Unknown";
+        $keyBufferFreePct = "Unknown";
     }
 }
 
@@ -298,7 +300,7 @@ $qcacheFreeBlocks = $globalStatus['Qcache_free_blocks'];
 $qcacheLowmemPrunes = $globalStatus['Qcache_lowmem_prunes'];
 
 $qcacheUsedMemory = $queryCacheSize - $qcacheFreeMemory;
-$qcacheMemFillRatio = $qcacheUsedMemory * 100 / $queryCacheSize;
+$queryCacheUsage = ($queryCacheSize > 0) ? percentage($qcacheUsedMemory, $queryCacheSize) : 0;
 $queryCacheEfficiency = $qcacheHits / ($comSelect + $qcacheHits);
 
 /* Sort operations */
@@ -324,7 +326,6 @@ $openFilesRatio = $openFiles * 100 / $openFilesLimit;
 
 /* Table cache */
 $dataDir = $globalVariables['datadir'];
-$tableCache = $globalVariables['table_cache'];
 $tableOpenCache = $globalVariables['table_open_cache'];
 $tableOpenCacheInstances = $globalVariables['table_open_cache_instances'];
 $tableDefinitionCache = $globalVariables['table_definition_cache'];
@@ -332,19 +333,17 @@ $openTables = $globalStatus['Open_tables'];
 $openedTables = $globalStatus['Opened_tables'];
 $openTableDefinitions = $globalStatus['Open_table_definitions'];
 
-if ($tableOpenCache) $tableCache = $tableOpenCache;
-
 $tableCount = 0;
 $stmt = $pdo->query("SELECT COUNT(*) AS table_count FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE'");
 $tableCount = $stmt->fetch()['table_count'];
 
-if ($openedTables != 0 && $tableCache != 0) {
+if ($openedTables != 0 && $tableOpenCache != 0) {
     $tableCacheHitRate = $openTables * 100 / $openedTables;
-    $tableCacheFill = $openTables * 100 / $tableCache;
+    $tableCacheFill = $openTables * 100 / $tableOpenCache;
 }
-elseif ($openedTables == 0 && $tableCache != 0) {
+elseif ($openedTables == 0 && $tableOpenCache != 0) {
     $tableCacheHitRate = 100;
-    $tableCacheFill = $openTables * 100 / $tableCache;
+    $tableCacheFill = $openTables * 100 / $tableOpenCache;
 }
 else {
     $tableCacheError = true;
@@ -747,7 +746,7 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                                 <tr>
                                     <td>Log bin:</td>
                                     <td><?= $logBin;
-                                        echo ($logBin == "ON") ? alert_check() : alert_error(); ?></td>
+                                        echo ($logBin == "ON") ? alert_check() : alert_info(); ?></td>
                                 </tr>
                                 <tr>
                                     <td>Max binlog size:</td>
@@ -795,7 +794,7 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                     <?php
                     if ($logBin != "ON") {
                         ?>
-                        <div class="alert alert-danger" role="alert">
+                        <div class="alert alert-info" role="alert">
                             The binary log is not enabled.
                         </div>
                         <?php
@@ -1344,8 +1343,12 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                                     <td>1 : <?= round($keyCacheMissRate) ?></td>
                                 </tr>
                                 <tr>
-                                    <td>Key buffer usage:</td>
-                                    <td><?= round($keyBufferFree) ?> %</td>
+                                    <td>Key buffer free:</td>
+                                    <td><?= round($keyBufferFreePct) ?> %</td>
+                                </tr>
+                                <tr>
+                                    <td>Key buffer used:</td>
+                                    <td><?= human_readable_bytes($keyBufferUsed) ?></td>
                                 </tr>
                             </table>
                         </div>
@@ -1377,7 +1380,7 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                         </div>
                         <?php
                     }
-                    if ($keyCacheMissRate <= 100 && $keyCacheMissRate > 0 && $keyBufferFree < 20) {
+                    if ($keyCacheMissRate <= 100 && $keyCacheMissRate > 0 && $keyBufferFreePct < 20) {
                         ?>
                         <div class="alert alert-warning" role="alert">
                             You could increase key_buffer_size. It is safe to raise this up to 1/4 of total system
@@ -1385,7 +1388,7 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                         </div>
                         <?php
                     }
-                    elseif ($keyCacheMissRate >= 10000 || $keyBufferFree < 50) {
+                    elseif ($keyCacheMissRate >= 10000 || $keyBufferFreePct < 50) {
                         ?>
                         <div class="alert alert-warning" role="alert">
                             Your key_buffer_size seems to be too high. Perhaps you can use these resources elsewhere.
@@ -1437,7 +1440,7 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                                 </tr>
                                 <tr>
                                     <td>Query cache usage:</td>
-                                    <td><?= round($qcacheMemFillRatio, 1) ?> %</td>
+                                    <td><?= round($queryCacheUsage, 1) ?> %</td>
                                 </tr>
                                 <tr>
                                     <td>Query cache efficiency:</td>
@@ -1495,7 +1498,7 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                         </div>
                         <?php
                     }
-                    if ($qcacheMemFillRatio < 25) {
+                    if ($queryCacheUsage < 25) {
                         ?>
                         <div class="alert alert-info" role="alert">
                             Your query cache size seems to be too high. Perhaps you can use these resources elsewhere.
