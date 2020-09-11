@@ -160,6 +160,15 @@ $abortedConnects = $globalStatus['Aborted_connects'];
 $connections = $globalStatus['Connections'];
 $abortedConnectsPct = percentage($abortedConnects, $connections);
 
+/* Aria */
+$ariaIndexLength = 0;
+$stmt = $pdo->query("SELECT IFNULL(SUM(INDEX_LENGTH),0) AS index_length FROM information_schema.TABLES WHERE ENGINE='Aria'");
+$ariaIndexLength = $stmt->fetch()['index_length'];
+
+$ariaPagecacheReads = $globalStatus['Aria_pagecache_reads'];
+$ariaPagecacheReadRequests = $globalStatus['Aria_pagecache_read_requests'];
+$ariaKeysFromMemoryPct = 100 - ( ($ariaPagecacheReads / $ariaPagecacheReadRequests) * 100);
+
 /* InnoDB */
 $innodbBufferPoolSize = $globalVariables['innodb_buffer_pool_size'];
 $innodbFilePerTable = $globalVariables['innodb_file_per_table'];
@@ -273,12 +282,14 @@ $versionCompileMachine = $globalVariables['version_compile_machine'];
 if ($keyReads == 0) {
     $keyCacheMissRate = 0;
     $keyBufferFreePct = $keyBlocksUnused * $keyCacheBlockSize / $keyBufferSize * 100;
+    $keyBufferUsedPct = 100 - $keyBufferFreePct;
     $keyBufferUsed = $keyBufferSize - (($keyBufferSize / 100) * $keyBufferFreePct);
 }
 else {
     $keyCacheMissRate = $keyReadRequests / $keyReads;
     if (!empty($keyBlocksUnused)) {
         $keyBufferFreePct = $keyBlocksUnused * $keyCacheBlockSize / $keyBufferSize * 100;
+        $keyBufferUsedPct = 100 - $keyBufferFreePct;
         $keyBufferUsed = $keyBufferSize - (($keyBufferSize / 100) * $keyBufferFreePct);
     }
     else {
@@ -405,7 +416,7 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
         }
 
         .container .row + .row {
-            margin-bottom: 1em;
+            margin-top: 1em;
         }
     </style>
 </head>
@@ -543,20 +554,19 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                             </table>
                         </div>
                     </div>
+                    <?php
+                    if ($uptime < 172800) {
+                        ?>
+                        <div class="alert alert-danger" role="alert">
+                            Server has not been running for at least 48hrs. It may not be safe to use these
+                            recommendations!
+                        </div>
+                        <?php
+                    }
+                    ?>
                 </div>
             </div>
         </div>
-    </div>
-    <div class='row'>
-        <?php
-        if ($uptime < 172800) {
-            ?>
-            <div class="alert alert-danger" role="alert">
-                Server has not been running for at least 48hrs. It may not be safe to use these recommendations!
-            </div>
-            <?php
-        }
-        ?>
     </div>
     <div class='row'>
         <a id='engines'></a>
@@ -626,7 +636,7 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                                 </tr>
                                 <tr>
                                     <td>Slow query count:</td>
-                                    <td><?= $slowQueries ?> of <?= $questions ?><br><?= $slowQueriesPct ?>
+                                    <td><?= $slowQueries ?> of <?= $questions ?><br><?= round($slowQueriesPct) ?>
                                         %<?= ($slowQueriesPct > 5) ? alert_error() : alert_check() ?></td>
                                 </tr>
                                 <tr>
@@ -987,6 +997,57 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                         <?php
                     }
                     ?>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class='row'>
+        <a id='used_connections'></a>
+        <div class='col-sm-12'>
+            <div class='card border-0 shadow-sm'>
+                <div class='card-header'>Aria <small>- Storage Engine</small></div>
+                <div class='card-body'>
+                    <div class='row'>
+                        <div class='col-sm-8'>
+                            <p>The Aria storage engine is compiled in by default from MariaDB 5.1 and it is required to be 'in use' when mysqld is started.</p>
+                            <p>From MariaDB 10.4, all system tables are Aria.</p>
+                            <p>Additionally, internal on-disk tables are in the Aria table format instead of the MyISAM table format. This should speed up some GROUP BY and DISTINCT queries because Aria has better caching than MyISAM.</p>
+                        </div>
+                        <div class='col-sm-4'>
+                            <table class='table table-sm'>
+                                <tr>
+                                    <td>Index size:</td>
+                                    <td><?= human_readable_bytes($ariaIndexLength) ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Pagecache buffer size:</td>
+                                    <td><?= human_readable_bytes($ariaPagecacheBufferSize) ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Reads (cached / disk):</td>
+                                    <td><?= $ariaPagecacheReadRequests ?> / <?= $ariaPagecacheReads ?></td>
+                                </tr>
+                                <tr>
+                                    <td>Keys from memory:</td>
+                                    <td><?= round($ariaKeysFromMemoryPct,1) ?> %</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                    <table class='table table-sm'>
+                        <tr>
+                            <th style='width: 30%'>Variable name</th>
+                            <th style='width: 35%'>Default value</th>
+                            <th style='width: 35%'>Current value</th>
+                        </tr>
+                        <tr>
+                            <td><samp>aria_pagecache_buffer_size</samp></td>
+                            <td>134217720 <span class='text-muted'>(128 MB)</span></td>
+                            <td><?= $ariaPagecacheBufferSize ?> <span
+                                        class='text-muted'>(<?= human_readable_bytes($ariaPagecacheBufferSize) ?>)</span>
+                            </td>
+                        </tr>
+                    </table>
                 </div>
             </div>
         </div>
@@ -1390,6 +1451,17 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                                     <td>Key buffer used:</td>
                                     <td><?= human_readable_bytes($keyBufferUsed) ?></td>
                                 </tr>
+                                <tr>
+                                    <td colspan='2'>
+                                        <div class="progress">
+                                            <div class="progress-bar" role="progressbar"
+                                                 style="width: <?= round($keyBufferUsedPct) ?>%;"
+                                                 aria-valuenow="<?= round($keyBufferUsedPct) ?>" aria-valuemin="0"
+                                                 aria-valuemax="100"><?= round($keyBufferUsedPct) ?> %
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
                             </table>
                         </div>
                     </div>
@@ -1428,7 +1500,7 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                         </div>
                         <?php
                     }
-                    elseif ($keyCacheMissRate >= 10000 || $keyBufferFreePct < 50) {
+                    elseif ($keyCacheMissRate >= 10000 || $keyBufferFreePct > 50) {
                         ?>
                         <div class="alert alert-warning" role="alert">
                             Your key_buffer_size seems to be too high. Perhaps you can use these resources elsewhere.
@@ -1523,7 +1595,7 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                         </tr>
                     </table>
                     <?php
-                    if ($queryCacheSize > 0 || $queryCacheType == "OFF") {
+                    if ($queryCacheSize > 0 || $queryCacheType != "OFF") {
                         ?>
                         <div class="alert alert-danger" role="alert">
                             Query cache is enabled but should not be used on multi-processor machines due to mutex
@@ -1740,7 +1812,18 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                                 </tr>
                                 <tr>
                                     <td>Open files ratio:</td>
-                                    <td><?= round($openFilesRatio, 1) ?> %</td>
+                                    <td><?= round($openFilesRatio, 1) ?> %<?= ($openFilesRatio < 85) ? alert_check() : alert_warning() ?></td>
+                                </tr>
+                                <tr>
+                                    <td colspan='2'>
+                                        <div class="progress">
+                                            <div class="progress-bar" role="progressbar"
+                                                 style="width: <?= round($openFilesRatio) ?>%;"
+                                                 aria-valuenow="<?= round($openFilesRatio) ?>" aria-valuemin="0"
+                                                 aria-valuemax="100"><?= round($openFilesRatio) ?> %
+                                            </div>
+                                        </div>
+                                    </td>
                                 </tr>
                             </table>
                         </div>
@@ -1758,20 +1841,12 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                         </tr>
                     </table>
                     <?php
-                    if ($openFilesRatio >= 75) {
+                    if ($openFilesRatio >= 85) {
                         ?>
                         <div class="alert alert-danger" role="alert">
-                            You currently have open more than 75% of your open_file_limit.
+                            You currently have open more than 85% of your open_file_limit.
                         </div>
                         <?php
-                    }
-                    else {
-                        ?>
-                        <div class="alert alert-success" role="alert">
-                            Your open_files_limit value seems to be fine.
-                        </div>
-                        <?php
-
                     }
                     ?>
                 </div>
@@ -1796,18 +1871,21 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                                 <tr>
                                     <td>Table cache:</td>
                                     <td><?= $openTables ?> of <?= $tableOpenCache ?><br>
-                                        <?= round($tableCacheUsage, 1) ?> %<?= ($tableCacheUsage < 95) ? alert_check() : alert_warning() ?>
+                                        <?= round($tableCacheUsage, 1) ?>
+                                        %<?= ($tableCacheUsage < 95) ? alert_check() : alert_warning() ?>
                                     </td>
                                 </tr>
                                 <tr>
                                     <td>Definition cache:</td>
                                     <td><?= $openTableDefinitions ?> of <?= $tableDefinitionCache ?><br>
-                                        <?= round($tableDefinitionCacheUsage, 1) ?> %<?= ($tableDefinitionCacheUsage < 95) ? alert_check() : alert_warning() ?>
+                                        <?= round($tableDefinitionCacheUsage, 1) ?>
+                                        %<?= ($tableDefinitionCacheUsage < 95) ? alert_check() : alert_warning() ?>
                                     </td>
                                 </tr>
                                 <tr>
                                     <td>Table cache hit rate:</td>
-                                    <td><?= round($tableCacheHitRate, 2) ?> %</td>
+                                    <td><?= round($tableCacheHitRate, 1) ?>
+                                        %<?= ($tableCacheHitRate > 85) ? alert_check() : alert_warning() ?></td>
                                 </tr>
                                 <tr>
                                     <td>Opened tables:</td>
@@ -1854,10 +1932,19 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                         </div>
                         <?php
                     }
-                    elseif ($tableCacheHitRate <= 85 || $tableCacheUsage >= 95) {
+                    elseif ($tableCacheUsage >= 95) {
                         ?>
-                        <div class="alert alert-danger" role="alert">
-                            You should probably increase your table_cache
+                        <div class="alert alert-warning" role="alert">
+                            You should probably increase your <samp>table_open_cache</samp> because there is not enough
+                            room in your table open cache.
+                        </div>
+                        <?php
+                    }
+                    elseif ($tableCacheHitRate <= 85) {
+                        ?>
+                        <div class="alert alert-warning" role="alert">
+                            You should probably increase your <samp>table_open_cache</samp> because too many tables are
+                            requested without using the cache.
                         </div>
                         <?php
                     }
