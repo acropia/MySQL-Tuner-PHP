@@ -20,7 +20,22 @@ function human_readable_bytes($number) {
 }
 
 function human_readable_time($seconds) {
-    return floor($seconds / 86400) . " days, " . ($seconds / 3600 % 24) . " hrs, " . ($seconds / 60 % 60) . " min";
+    $time = "";
+
+    $days = floor($seconds / 86400);
+    if ($days > 0) {
+        $time .= $days. " days,";
+    }
+    $hours = $seconds / 3600 % 24;
+    if ($hours > 0) {
+        $time .= $hours. " hours,";
+    }
+
+    $minutes =  $seconds / 60 % 60;
+    if ($minutes > 0) {
+        $time .= $minutes." min";
+    }
+    return $time;
 }
 
 function human_readable_comma_enum($string) {
@@ -165,6 +180,8 @@ $ariaIndexLength = 0;
 $stmt = $pdo->query("SELECT IFNULL(SUM(INDEX_LENGTH),0) AS index_length FROM information_schema.TABLES WHERE ENGINE='Aria'");
 $ariaIndexLength = $stmt->fetch()['index_length'];
 
+$ariaBlockSize = $globalVariables['aria_block_size'];
+$ariaPagecacheAgeThreshold = $globalVariables['aria_pagecache_age_threshold'];
 $ariaPagecacheReads = $globalStatus['Aria_pagecache_reads'];
 $ariaPagecacheReadRequests = $globalStatus['Aria_pagecache_read_requests'];
 $ariaKeysFromMemoryPct = 100 - ( ($ariaPagecacheReads / $ariaPagecacheReadRequests) * 100);
@@ -877,15 +894,15 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                             <th style='width: 35%'>Current value</th>
                         </tr>
                         <tr>
-                            <td><samp>thread_handling</samp></td>
-                            <td>one-thread-per-connection</td>
-                            <td><?= $threadHandling ?></td>
-                        </tr>
-                        <tr>
                             <td><samp>thread_cache_size</samp></td>
                             <td>0 <span class='text-muted'>(<= MariaDB 10.1)</span><br>256 <span class='text-muted'>(from MariaDB 10.2.0)</span>
                             </td>
                             <td><?= $threadCacheSize ?></td>
+                        </tr>
+                        <tr>
+                            <td><samp>thread_handling</samp></td>
+                            <td>one-thread-per-connection</td>
+                            <td><?= $threadHandling ?></td>
                         </tr>
                     </table>
                     <?php
@@ -1039,6 +1056,20 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                             <th style='width: 30%'>Variable name</th>
                             <th style='width: 35%'>Default value</th>
                             <th style='width: 35%'>Current value</th>
+                        </tr>
+                        <tr>
+                            <td><samp>aria_block_size</samp></td>
+                            <td>8192 <span class='text-muted'>(8 KB)</span></td>
+                            <td><?= $ariaBlockSize ?> <span
+                                        class='text-muted'>(<?= human_readable_bytes($ariaBlockSize) ?>)</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><samp>aria_pagecache_age_threshold</samp></td>
+                            <td>300 <span class='text-muted'>(5 min)</span></td>
+                            <td><?= $ariaPagecacheAgeThreshold ?> <span
+                                        class='text-muted'>(<?= human_readable_time($ariaPagecacheAgeThreshold) ?>)</span>
+                            </td>
                         </tr>
                         <tr>
                             <td><samp>aria_pagecache_buffer_size</samp></td>
