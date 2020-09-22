@@ -435,6 +435,16 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
         .container .row + .row {
             margin-top: 1em;
         }
+        .footer {
+            background-color: #18171b;
+        }
+        .footer h5, .footer li {
+            font-size: .9em;
+            color: darkgrey;
+        }
+        .footer .nav-item a {
+            color: darkgrey;
+        }
     </style>
 </head>
 <body>
@@ -461,6 +471,7 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                         Misc
                     </a>
                     <div class="dropdown-menu" aria-labelledby="navbarMisc">
+                        <a class="dropdown-item" href="#database_engines">Database engines</a>
                         <a class="dropdown-item" href="#slow_queries">Slow queries</a>
                         <a class="dropdown-item" href="#binary_log">Binary log</a>
                         <a class="dropdown-item" href="#threads">Threads</a>
@@ -586,7 +597,7 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
         </div>
     </div>
     <div class='row'>
-        <a id='engines'></a>
+        <a id='database_engines'></a>
         <div class='col-sm-12'>
             <div class='card border-0 shadow-sm'>
                 <div class='card-header'>Database engines</div>
@@ -1019,7 +1030,7 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
         </div>
     </div>
     <div class='row'>
-        <a id='used_connections'></a>
+        <a id='aria'></a>
         <div class='col-sm-12'>
             <div class='card border-0 shadow-sm'>
                 <div class='card-header'>Aria <small>- Storage Engine</small></div>
@@ -2255,21 +2266,63 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
         </div>
     </div>
 </div>
-<div class='text-light bg-dark'>
+<div class='text-light footer mt-4'>
     <div class='container'>
         <div class='row'>
-            <div class='col-sm-12'>
+            <div class='col-sm-12 my-3'>
                 <p style='color: rgb(192, 190, 195)'>MySQL-Tuner-PHP is a open source project of Acropia. Feel free to
                     use whereever and however you want!</p>
             </div>
         </div>
-        <div class='row'>
-            <div class='col-sm-2'>Col</div>
-            <div class='col-sm-2'>Col</div>
-            <div class='col-sm-2'>Col</div>
-            <div class='col-sm-2'>Col</div>
-            <div class='col-sm-2'>Col</div>
-            <div class='col-sm-2'>Col</div>
+        <div class='row pb-3'>
+            <div class='col-sm-2'>
+                <h5>MySQL-Tuner-PHP?</h5>
+                <ul class="nav flex-column">
+                    <li class="nav-item">Introduction</li>
+                    <li class="nav-item">Installation</li>
+                    <li class="nav-item">References</li>
+                    <li class="nav-item">Releases &amp; development</li>
+                    <li class="nav-item">License</li>
+                </ul>
+            </div>
+            <div class='col-sm-2'>
+                <h5>Misc</h5>
+                <ul class="nav flex-column">
+                    <li class="nav-item"><a href="#database_engines">Database engines</a></li>
+                    <li class="nav-item"><a href="#slow_queries">Slow queries</a></li>
+                    <li class="nav-item"><a href="#binary_log">Binary log</a></li>
+                    <li class="nav-item"><a href="#threads">Threads</a></li>
+                    <li class="nav-item"><a href="#aria">Aria</a></li>
+                    <li class="nav-item"><a href="#innodb">InnoDB</a></li>
+                </ul>
+            </div>
+            <div class='col-sm-2'>
+                <h5>Memory</h5>
+                <ul class="nav flex-column">
+                    <li class="nav-item"><a href="#memory_usage">Memory used</a></li>
+                    <li class="nav-item"><a href="#key_buffer">Key buffer</a></li>
+                    <li class="nav-item"><a href="#query_cache">Query cache</a></li>
+                    <li class="nav-item"><a href="#sort_operations">Sort operations</a></li>
+                    <li class="nav-item"><a href="#join_operations">Join operations</a></li>
+                </ul>
+            </div>
+            <div class='col-sm-2'>
+                <h5>File</h5>
+                <ul class="nav flex-column">
+                    <li class="nav-item"><a href="#open_files">Open files</a></li>
+                    <li class="nav-item"><a href="#table_cache">Table cache</a></li>
+                    <li class="nav-item"><a href="#temp_tables">Temp. tables</a></li>
+                    <li class="nav-item"><a href="#table_scans">Table scans</a></li>
+                    <li class="nav-item"><a href="#table_locking">Table locking</a></li>
+                </ul>
+            </div>
+            <div class='col-sm-2'>
+                <h5>Variables</h5>
+                <ul class="nav flex-column">
+                    <li class="nav-item"><a href="#status_variables">Status variables</a></li>
+                    <li class="nav-item"><a href="#system_variables">System variables</a></li>
+                </ul>
+            </div>
         </div>
     </div>
 </div>
