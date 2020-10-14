@@ -625,7 +625,7 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                                 <td><?= $engineConfig['Transactions'] ?></td>
                                 <td><?= $engineConfig['XA'] ?></td>
                                 <td><?= $engineConfig['Savepoints'] ?></td>
-                                <td><?= $engineConfig['coun
+                                <td><?= $engineConfig['count'] ?></td>
                             </tr>
                             <?php
                         }
