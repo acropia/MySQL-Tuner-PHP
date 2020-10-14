@@ -118,12 +118,15 @@ while ($row = $stmt->fetch()) {
 $engines = [];
 $stmt = $pdo->query('SELECT Engine, Support, Comment, Transactions, XA, Savepoints FROM information_schema.ENGINES ORDER BY Engine ASC');
 while ($row = $stmt->fetch()) {
+    $stmt2 = $pdo->query('SELECT COUNT(*) as count FROM information_schema.tables WHERE table_type = \'BASE TABLE\' and ENGINE = \''.$row['Engine'].'\'');
+    $row2 = $stmt2->fetch();
     $engines[$row['Engine']] = [
         'Support' => $row['Support'],
         'Comment' => $row['Comment'],
         'Transactions' => $row['Transactions'],
         'XA' => $row['XA'],
         'Savepoints' => $row['Savepoints'],
+        'count' => $row2['count'],
     ];
 }
 
@@ -610,6 +613,7 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                             <th>Transactions</th>
                             <th>XA</th>
                             <th>Savepoints</th>
+                            <th># Tables</th>
                         </tr>
                         <?php
                         foreach ($engines as $engineName => $engineConfig) {
@@ -621,6 +625,7 @@ $immediateLocksMissRate = ($tableLocksWaited > 0) ? $tableLocksImmediate / $tabl
                                 <td><?= $engineConfig['Transactions'] ?></td>
                                 <td><?= $engineConfig['XA'] ?></td>
                                 <td><?= $engineConfig['Savepoints'] ?></td>
+                                <td><?= $engineConfig['coun
                             </tr>
                             <?php
                         }
